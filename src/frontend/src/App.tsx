@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -136,7 +137,7 @@ function Navbar() {
             aria-label="Go to top"
           >
             <img
-              src="/assets/generated/logo-horizontal-transparent.dim_600x160.png"
+              src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
               alt="Hirevena – Where Hiring Never Stops"
               className="h-10 md:h-14 w-auto object-contain"
             />
@@ -379,46 +380,119 @@ function HeroSection() {
   );
 }
 
-// ─── Trust Section ───────────────────────────────────────────────
-function TrustSection() {
-  const clientNames = [
-    "Tata Motors",
-    "Mahindra Group",
-    "Bajaj Auto",
-    "L&T Engineering",
-    "Asian Paints",
-    "Hindustan Unilever",
+// ─── Testimonials / Client Voice Section ─────────────────────────
+function TestimonialsSection() {
+  const testimonials = [
+    {
+      quote:
+        "Hirevena filled 80 production operators for our new plant line in just 9 days. We've never seen that speed from any agency before.",
+      name: "Rakesh Mehta",
+      title: "Plant Head – Auto Components Manufacturer, Pune",
+      initial: "R",
+    },
+    {
+      quote:
+        "The pre-screening process saved our HR team weeks of work. Every candidate was document-verified and ready to join the floor immediately.",
+      name: "Priya Nair",
+      title: "HR Manager – FMCG Manufacturing, Bengaluru",
+      initial: "P",
+    },
+    {
+      quote:
+        "We struggled with ITI welder recruitment for months. Hirevena delivered 30 certified candidates within 2 weeks. Outstanding network.",
+      name: "Sandeep Gupta",
+      title: "Operations Director – Engineering Company, Gujarat",
+      initial: "S",
+    },
   ];
 
   return (
     <section
-      id="trust"
-      data-ocid="trust.section"
-      className="py-16 bg-brand-section"
+      id="testimonials"
+      data-ocid="testimonials.section"
+      className="py-20"
       style={{ backgroundColor: "oklch(0.97 0.025 240)" }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-10 reveal">
-          <h2 className="text-2xl md:text-3xl font-display font-bold text-navy mb-3">
-            Trusted Recruitment Partner for Industrial Growth
+        <div className="text-center mb-14 reveal">
+          <div
+            className="inline-block px-3 py-1 rounded-full text-xs font-bold tracking-widest uppercase mb-4 text-white"
+            style={{ backgroundColor: "oklch(0.55 0.17 245)" }}
+          >
+            Client Voices
+          </div>
+          <h2 className="text-3xl md:text-4xl font-display font-black text-navy mb-4">
+            What Our Clients Say
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Leading manufacturing companies across India rely on Hirevena for
-            their workforce needs.
+            Real outcomes from HR managers, plant heads, and operations leaders
+            across India's industrial sector.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {clientNames.map((name, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-7">
+          {testimonials.map((t, i) => (
             <div
-              key={name}
-              className={`reveal reveal-delay-${i + 1} flex items-center justify-center bg-white rounded-xl h-16 px-4 shadow-card`}
+              key={t.name}
+              data-ocid={`testimonials.item.${i + 1}`}
+              className={`reveal reveal-delay-${i + 1} bg-white rounded-2xl p-7 shadow-card border border-border flex flex-col card-hover`}
             >
-              <span className="text-xs font-semibold text-muted-foreground/60 text-center tracking-wide uppercase">
-                {name}
-              </span>
+              {/* Quote mark */}
+              <div
+                className="text-5xl font-display font-black leading-none mb-4 select-none"
+                style={{ color: "oklch(0.55 0.17 245)", opacity: 0.25 }}
+                aria-hidden="true"
+              >
+                "
+              </div>
+              <p className="text-sm text-foreground/75 leading-relaxed flex-1 mb-6 font-body italic">
+                "{t.quote}"
+              </p>
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-display font-black text-sm flex-shrink-0"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.28 0.085 245), oklch(0.55 0.17 245))",
+                  }}
+                >
+                  {t.initial}
+                </div>
+                <div>
+                  <div className="font-display font-bold text-navy text-sm">
+                    {t.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground leading-snug">
+                    {t.title}
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
+        </div>
+
+        {/* Credibility strip */}
+        <div className="mt-12 reveal">
+          <div className="bg-white rounded-2xl border border-border shadow-card px-8 py-6 flex flex-col sm:flex-row items-center justify-around gap-6 text-center">
+            {[
+              { value: "1,000+", label: "Candidates Placed" },
+              { value: "50+", label: "Corporate Clients" },
+              { value: "200+", label: "ITI College Network" },
+              { value: "7 Days", label: "Avg. Deployment" },
+            ].map((stat) => (
+              <div key={stat.label} className="flex flex-col items-center">
+                <span
+                  className="text-2xl font-display font-black"
+                  style={{ color: "oklch(0.55 0.17 245)" }}
+                >
+                  {stat.value}
+                </span>
+                <span className="text-xs font-semibold text-muted-foreground mt-0.5">
+                  {stat.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -975,6 +1049,8 @@ function LeadCaptureSection() {
     role: "",
     positions: "",
     urgency: "",
+    jobLocation: "",
+    message: "",
   });
   const [formError, setFormError] = useState<Record<string, string>>({});
 
@@ -998,14 +1074,11 @@ function LeadCaptureSection() {
     if (!form.companyName.trim())
       errors.companyName = "Company name is required.";
     if (!form.contactName.trim())
-      errors.contactName = "Contact name is required.";
-    if (!form.phone.trim()) errors.phone = "Phone number is required.";
+      errors.contactName = "Contact person name is required.";
+    if (!form.phone.trim()) errors.phone = "Mobile number is required.";
     if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errors.email = "Valid email address is required.";
-    if (!form.role.trim()) errors.role = "Hiring role is required.";
-    if (!form.positions.trim())
-      errors.positions = "Number of positions is required.";
-    if (!form.urgency) errors.urgency = "Please select hiring urgency.";
+      errors.email = "Valid official email is required.";
+    if (!form.urgency) errors.urgency = "Please select urgency level.";
     return errors;
   };
 
@@ -1021,6 +1094,11 @@ function LeadCaptureSection() {
     (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
       setFormError((prev) => ({ ...prev, [field]: "" }));
+    };
+
+  const updateTextarea =
+    (field: string) => (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
     };
 
   return (
@@ -1045,13 +1123,11 @@ function LeadCaptureSection() {
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-4xl font-display font-black text-white mb-3">
-            Need Skilled Workforce Fast?
+            Get Skilled Workforce in 48 Hours
           </h2>
-          <p
-            className="text-base font-bold"
-            style={{ color: "oklch(0.82 0.17 80)" }}
-          >
-            ⚡ Our hiring experts respond within 2 hours.
+          <p className="text-base text-white/80 max-w-xl mx-auto leading-relaxed">
+            Tell us your hiring requirement and our recruitment specialists will
+            contact you within 2 hours.
           </p>
         </div>
 
@@ -1072,10 +1148,10 @@ function LeadCaptureSection() {
                 />
               </div>
               <h3 className="text-2xl font-display font-black text-navy mb-3">
-                Request Received!
+                Thank You!
               </h3>
               <p className="text-muted-foreground max-w-sm mx-auto">
-                Thank you! Our hiring expert will contact you within 2 hours.
+                Thank you. Our hiring specialist will contact you shortly.
               </p>
               <Button
                 className="mt-6 text-white font-bold"
@@ -1120,19 +1196,23 @@ function LeadCaptureSection() {
                     aria-invalid={!!formError.companyName}
                   />
                   {formError.companyName && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      data-ocid="lead_form.company_name.error_state"
+                      className="text-xs text-destructive"
+                    >
                       {formError.companyName}
                     </p>
                   )}
                 </div>
 
-                {/* Contact Name */}
+                {/* Contact Person Name */}
                 <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="contactName"
                     className="font-semibold text-navy text-sm"
                   >
-                    HR Contact Name <span className="text-destructive">*</span>
+                    Contact Person Name{" "}
+                    <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="contactName"
@@ -1144,19 +1224,22 @@ function LeadCaptureSection() {
                     aria-invalid={!!formError.contactName}
                   />
                   {formError.contactName && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      data-ocid="lead_form.contact_name.error_state"
+                      className="text-xs text-destructive"
+                    >
                       {formError.contactName}
                     </p>
                   )}
                 </div>
 
-                {/* Phone */}
+                {/* Mobile Number */}
                 <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="phone"
                     className="font-semibold text-navy text-sm"
                   >
-                    Phone Number <span className="text-destructive">*</span>
+                    Mobile Number <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="phone"
@@ -1170,19 +1253,22 @@ function LeadCaptureSection() {
                     aria-invalid={!!formError.phone}
                   />
                   {formError.phone && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      data-ocid="lead_form.phone.error_state"
+                      className="text-xs text-destructive"
+                    >
                       {formError.phone}
                     </p>
                   )}
                 </div>
 
-                {/* Email */}
+                {/* Official Email */}
                 <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="email"
                     className="font-semibold text-navy text-sm"
                   >
-                    Email Address <span className="text-destructive">*</span>
+                    Official Email <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="email"
@@ -1196,19 +1282,22 @@ function LeadCaptureSection() {
                     aria-invalid={!!formError.email}
                   />
                   {formError.email && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      data-ocid="lead_form.email.error_state"
+                      className="text-xs text-destructive"
+                    >
                       {formError.email}
                     </p>
                   )}
                 </div>
 
-                {/* Hiring Role */}
+                {/* Hiring Position */}
                 <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="role"
                     className="font-semibold text-navy text-sm"
                   >
-                    Hiring Role <span className="text-destructive">*</span>
+                    Hiring Position
                   </Label>
                   <Input
                     id="role"
@@ -1217,21 +1306,16 @@ function LeadCaptureSection() {
                     value={form.role}
                     onChange={update("role")}
                     className="rounded-xl border-border"
-                    aria-invalid={!!formError.role}
                   />
-                  {formError.role && (
-                    <p className="text-xs text-destructive">{formError.role}</p>
-                  )}
                 </div>
 
-                {/* Number of Positions */}
+                {/* Number of Candidates Required */}
                 <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="positions"
                     className="font-semibold text-navy text-sm"
                   >
-                    Number of Positions{" "}
-                    <span className="text-destructive">*</span>
+                    Number of Candidates Required
                   </Label>
                   <Input
                     id="positions"
@@ -1240,22 +1324,34 @@ function LeadCaptureSection() {
                     value={form.positions}
                     onChange={update("positions")}
                     className="rounded-xl border-border"
-                    aria-invalid={!!formError.positions}
                   />
-                  {formError.positions && (
-                    <p className="text-xs text-destructive">
-                      {formError.positions}
-                    </p>
-                  )}
                 </div>
 
-                {/* Urgency - full width */}
-                <div className="flex flex-col gap-1.5 md:col-span-2">
+                {/* Job Location */}
+                <div className="flex flex-col gap-1.5">
+                  <Label
+                    htmlFor="jobLocation"
+                    className="font-semibold text-navy text-sm"
+                  >
+                    Job Location
+                  </Label>
+                  <Input
+                    id="jobLocation"
+                    data-ocid="lead_form.job_location.input"
+                    placeholder="e.g. Pune, Mumbai, Bengaluru"
+                    value={form.jobLocation}
+                    onChange={update("jobLocation")}
+                    className="rounded-xl border-border"
+                  />
+                </div>
+
+                {/* Urgency Level */}
+                <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="urgency"
                     className="font-semibold text-navy text-sm"
                   >
-                    Hiring Urgency <span className="text-destructive">*</span>
+                    Urgency Level <span className="text-destructive">*</span>
                   </Label>
                   <Select
                     value={form.urgency}
@@ -1268,23 +1364,45 @@ function LeadCaptureSection() {
                       data-ocid="lead_form.urgency.select"
                       className="rounded-xl border-border"
                     >
-                      <SelectValue placeholder="Select hiring urgency" />
+                      <SelectValue placeholder="Select urgency level" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="immediate">
-                        Immediate – Within 7 Days
+                      <SelectItem value="immediate">Immediate</SelectItem>
+                      <SelectItem value="within_7_days">
+                        Within 7 Days
                       </SelectItem>
-                      <SelectItem value="one_month">Within 1 Month</SelectItem>
-                      <SelectItem value="planning_ahead">
-                        Planning Ahead – 2–3 Months
+                      <SelectItem value="within_30_days">
+                        Within 30 Days
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   {formError.urgency && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      data-ocid="lead_form.urgency.error_state"
+                      className="text-xs text-destructive"
+                    >
                       {formError.urgency}
                     </p>
                   )}
+                </div>
+
+                {/* Message / Additional Requirements - full width */}
+                <div className="flex flex-col gap-1.5 md:col-span-2">
+                  <Label
+                    htmlFor="message"
+                    className="font-semibold text-navy text-sm"
+                  >
+                    Message / Additional Requirements
+                  </Label>
+                  <Textarea
+                    id="message"
+                    data-ocid="lead_form.message.textarea"
+                    placeholder="Tell us more about your hiring requirements, preferred skills, work timings, or any other details..."
+                    value={form.message}
+                    onChange={updateTextarea("message")}
+                    className="rounded-xl border-border resize-none min-h-[100px]"
+                    rows={4}
+                  />
                 </div>
               </div>
 
@@ -1306,11 +1424,31 @@ function LeadCaptureSection() {
                   </>
                 ) : (
                   <>
-                    Get Candidates Within 7 Days
+                    Request Workforce Now
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </>
                 )}
               </Button>
+
+              {/* Trust badges */}
+              <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-5">
+                {[
+                  "10 Day Replacement Guarantee",
+                  "100% Pre-Screened Candidates",
+                  "Fast Industrial Hiring",
+                ].map((badge) => (
+                  <span
+                    key={badge}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
+                  >
+                    <CheckCircle2
+                      className="w-3.5 h-3.5 flex-shrink-0"
+                      style={{ color: "oklch(0.55 0.17 245)" }}
+                    />
+                    {badge}
+                  </span>
+                ))}
+              </div>
 
               <p className="text-center text-xs text-muted-foreground mt-4">
                 By submitting, you agree to our Privacy Policy. We never share
@@ -1343,9 +1481,9 @@ function Footer() {
           {/* About */}
           <div>
             <img
-              src="/assets/generated/logo-white-transparent.dim_600x160.png"
+              src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
               alt="Hirevena"
-              className="h-12 w-auto mb-4 object-contain"
+              className="h-16 w-auto mb-4 object-contain"
             />
             <p className="text-sm text-white/65 leading-relaxed mb-4">
               Hirevena is India's trusted recruitment partner for manufacturing
@@ -1521,7 +1659,7 @@ export default function App() {
       <Navbar />
       <main>
         <HeroSection />
-        <TrustSection />
+        <TestimonialsSection />
         <AboutSection />
         <ServicesSection />
         <ProcessSection />

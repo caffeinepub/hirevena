@@ -11,14 +11,17 @@ import { IDL } from '@icp-sdk/core/candid';
 export const Time = IDL.Int;
 export const Submission = IDL.Record({
   'id' : IDL.Nat,
+  'status' : IDL.Text,
   'contactName' : IDL.Text,
   'urgency' : IDL.Text,
   'role' : IDL.Text,
+  'notes' : IDL.Text,
   'timestamp' : Time,
   'companyName' : IDL.Text,
   'emailAddress' : IDL.Text,
   'phoneNumber' : IDL.Text,
   'positions' : IDL.Text,
+  'followUpDate' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -27,7 +30,13 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
+  'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
+  'updateLead' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Bool],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -36,14 +45,17 @@ export const idlFactory = ({ IDL }) => {
   const Time = IDL.Int;
   const Submission = IDL.Record({
     'id' : IDL.Nat,
+    'status' : IDL.Text,
     'contactName' : IDL.Text,
     'urgency' : IDL.Text,
     'role' : IDL.Text,
+    'notes' : IDL.Text,
     'timestamp' : Time,
     'companyName' : IDL.Text,
     'emailAddress' : IDL.Text,
     'phoneNumber' : IDL.Text,
     'positions' : IDL.Text,
+    'followUpDate' : IDL.Text,
   });
   
   return IDL.Service({
@@ -52,7 +64,13 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
+    'updateLead' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
   });
 };
 

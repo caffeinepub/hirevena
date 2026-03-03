@@ -12,14 +12,17 @@ import type { Principal } from '@icp-sdk/core/principal';
 
 export interface Submission {
   'id' : bigint,
+  'status' : string,
   'contactName' : string,
   'urgency' : string,
   'role' : string,
+  'notes' : string,
   'timestamp' : Time,
   'companyName' : string,
   'emailAddress' : string,
   'phoneNumber' : string,
   'positions' : string,
+  'followUpDate' : string,
 }
 export type Time = bigint;
 export interface _SERVICE {
@@ -27,7 +30,9 @@ export interface _SERVICE {
     [string, string, string, string, string, string, string],
     undefined
   >,
+  'deleteSubmission' : ActorMethod<[bigint], boolean>,
   'getAllSubmissions' : ActorMethod<[], Array<Submission>>,
+  'updateLead' : ActorMethod<[bigint, string, string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];
