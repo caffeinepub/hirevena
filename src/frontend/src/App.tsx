@@ -112,6 +112,7 @@ function Navbar() {
 
   const navLinks = [
     { label: "Services", id: "services" },
+    { label: "Admin", id: "admin", isRoute: true, href: "/admin" },
     { label: "About", id: "about" },
     { label: "Industries", id: "industries" },
     { label: "How We Work", id: "process" },
@@ -136,26 +137,38 @@ function Navbar() {
             className="flex-shrink-0"
             aria-label="Go to top"
           >
-            <img
-              src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
-              alt="Hirevena – Where Hiring Never Stops"
-              className="h-10 md:h-14 w-auto object-contain"
-            />
+            <span
+              className="font-display font-black text-xl md:text-2xl tracking-tight"
+              style={{ color: "oklch(0.28 0.085 245)" }}
+            >
+              Hirevena
+            </span>
           </button>
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
-            {navLinks.map((link) => (
-              <button
-                type="button"
-                key={link.id}
-                data-ocid={`nav.${link.id}.link`}
-                onClick={() => scrollTo(link.id)}
-                className="text-sm font-medium text-foreground/80 hover:text-brand-navy transition-colors"
-              >
-                {link.label}
-              </button>
-            ))}
+            {navLinks.map((link) =>
+              (link as any).isRoute ? (
+                <a
+                  key={link.id}
+                  href={(link as any).href}
+                  data-ocid={`nav.${link.id}.link`}
+                  className="text-sm font-medium text-foreground/80 hover:text-brand-navy transition-colors"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  key={link.id}
+                  data-ocid={`nav.${link.id}.link`}
+                  onClick={() => scrollTo(link.id)}
+                  className="text-sm font-medium text-foreground/80 hover:text-brand-navy transition-colors"
+                >
+                  {link.label}
+                </button>
+              ),
+            )}
             <Button
               data-ocid="nav.request_proposal.button"
               onClick={() => scrollTo("contact")}
@@ -183,17 +196,29 @@ function Navbar() {
       {isOpen && (
         <div className="md:hidden bg-white border-t border-border shadow-lg">
           <div className="px-4 py-4 space-y-2">
-            {navLinks.map((link) => (
-              <button
-                type="button"
-                key={link.id}
-                data-ocid={`nav.mobile.${link.id}.link`}
-                onClick={() => scrollTo(link.id)}
-                className="block w-full text-left px-3 py-2 text-sm font-medium text-foreground hover:text-brand-navy hover:bg-brand-section rounded-md transition-colors"
-              >
-                {link.label}
-              </button>
-            ))}
+            {navLinks.map((link) =>
+              (link as any).isRoute ? (
+                <a
+                  key={link.id}
+                  href={(link as any).href}
+                  data-ocid={`nav.mobile.${link.id}.link`}
+                  className="block w-full text-left px-3 py-2 text-sm font-medium text-foreground hover:text-brand-navy hover:bg-brand-section rounded-md transition-colors"
+                  onClick={() => setIsOpen(false)}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  key={link.id}
+                  data-ocid={`nav.mobile.${link.id}.link`}
+                  onClick={() => scrollTo(link.id)}
+                  className="block w-full text-left px-3 py-2 text-sm font-medium text-foreground hover:text-brand-navy hover:bg-brand-section rounded-md transition-colors"
+                >
+                  {link.label}
+                </button>
+              ),
+            )}
             <Button
               data-ocid="nav.mobile.request_proposal.button"
               onClick={() => scrollTo("contact")}
@@ -1040,7 +1065,7 @@ function ResultsSection() {
 
 // ─── Lead Capture Form ───────────────────────────────────────────
 function LeadCaptureSection() {
-  const { actor } = useActor();
+  const { actor, isFetching: actorLoading } = useActor();
   const [form, setForm] = useState({
     companyName: "",
     contactName: "",
@@ -1057,13 +1082,26 @@ function LeadCaptureSection() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!actor) throw new Error("Actor not ready");
+      // Combine optional fields into role and positions so they are stored in the backend
+      const roleWithLocation = [
+        form.role,
+        form.jobLocation ? `Location: ${form.jobLocation}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const positionsWithMessage = [
+        form.positions,
+        form.message ? `Note: ${form.message}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
       await actor.createSubmission(
         form.companyName,
         form.contactName,
         form.phone,
         form.email,
-        form.role,
-        form.positions,
+        roleWithLocation || "-",
+        positionsWithMessage || "-",
         form.urgency,
       );
     },
@@ -1173,7 +1211,8 @@ function LeadCaptureSection() {
                     color: "oklch(0.45 0.2 27)",
                   }}
                 >
-                  Something went wrong. Please try again or call us directly.
+                  Submit nahi ho paya. Kripya dobara try karein ya seedha call
+                  karein: +91 95697 32215
                 </div>
               )}
 
@@ -1410,7 +1449,7 @@ function LeadCaptureSection() {
                 type="submit"
                 data-ocid="lead_form.submit_button"
                 size="lg"
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || actorLoading}
                 className="w-full mt-8 text-white font-bold text-base rounded-xl py-4 shadow-navy transition-all duration-200 hover:scale-[1.01]"
                 style={{
                   background:
@@ -1421,6 +1460,11 @@ function LeadCaptureSection() {
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     Submitting...
+                  </>
+                ) : actorLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Loading...
                   </>
                 ) : (
                   <>
@@ -1480,11 +1524,11 @@ function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* About */}
           <div>
-            <img
-              src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
-              alt="Hirevena"
-              className="h-16 w-auto mb-4 object-contain"
-            />
+            <div className="mb-4">
+              <span className="font-display font-black text-2xl tracking-tight text-white">
+                Hirevena
+              </span>
+            </div>
             <p className="text-sm text-white/65 leading-relaxed mb-4">
               Hirevena is India's trusted recruitment partner for manufacturing
               and industrial companies. We specialize in bulk hiring, ITI &

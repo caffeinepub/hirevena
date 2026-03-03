@@ -3,9 +3,9 @@ import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Array "mo:core/Array";
 import Order "mo:core/Order";
-import Migration "migration";
 
-(with migration = Migration.run)
+
+
 actor {
   type Submission = {
     id : Nat;

@@ -63,11 +63,11 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 "linear-gradient(135deg, oklch(0.28 0.085 245), oklch(0.40 0.12 245))",
             }}
           >
-            <img
-              src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
-              alt="Hirevena"
-              className="h-16 w-auto mx-auto mb-4 object-contain"
-            />
+            <div className="mb-4">
+              <span className="font-display font-black text-3xl tracking-tight text-white">
+                Hirevena
+              </span>
+            </div>
             <h1 className="text-xl font-display font-black text-white tracking-tight">
               Admin Dashboard
             </h1>

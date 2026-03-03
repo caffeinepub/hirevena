@@ -588,11 +588,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           className="px-5 py-5 border-b"
           style={{ borderColor: "rgba(255,255,255,0.10)" }}
         >
-          <img
-            src="/assets/uploads/IMG_20260303_130341.jpg-1.jpeg"
-            alt="Hirevena"
-            className="h-12 w-auto object-contain"
-          />
+          <span className="font-display font-black text-xl tracking-tight text-white">
+            Hirevena
+          </span>
           <p className="text-white/50 text-xs mt-2 font-medium tracking-wide uppercase">
             CRM Dashboard
           </p>
