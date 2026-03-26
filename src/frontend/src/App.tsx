@@ -112,7 +112,6 @@ function Navbar() {
 
   const navLinks = [
     { label: "Services", id: "services" },
-    { label: "Admin", id: "admin", isRoute: true, href: "/admin" },
     { label: "About", id: "about" },
     { label: "Industries", id: "industries" },
     { label: "How We Work", id: "process" },
