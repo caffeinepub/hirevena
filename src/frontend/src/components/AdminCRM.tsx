@@ -26,6 +26,7 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
+  Database,
   Download,
   FileText,
   LogOut,
@@ -62,6 +63,7 @@ import {
   type Recruiter,
   useCRMStore,
 } from "../hooks/useCRMStore";
+import AssignDataSection from "./AssignDataSection";
 
 type AdminSection =
   | "dashboard"
@@ -71,7 +73,8 @@ type AdminSection =
   | "notifications"
   | "logs"
   | "export"
-  | "settings";
+  | "settings"
+  | "assigndata";
 
 const STATUS_COLORS: Record<string, string> = {
   New: "bg-blue-100 text-blue-700",
@@ -146,6 +149,7 @@ export default function AdminCRM({ onLogout }: { onLogout: () => void }) {
       badge: pendingCount,
     },
     { key: "logs", label: "Activity Logs", icon: Activity },
+    { key: "assigndata", label: "Assign Data", icon: Database },
     { key: "export", label: "Export", icon: Download },
     { key: "settings", label: "Settings", icon: Settings },
   ];
@@ -246,6 +250,7 @@ export default function AdminCRM({ onLogout }: { onLogout: () => void }) {
           {section === "clients" && <ClientsSection />}
           {section === "notifications" && <NotificationsSection />}
           {section === "logs" && <LogsSection />}
+          {section === "assigndata" && <AssignDataSection />}
           {section === "export" && <ExportSection />}
           {section === "settings" && <SettingsSection />}
         </div>

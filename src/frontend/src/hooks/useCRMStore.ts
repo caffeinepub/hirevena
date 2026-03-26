@@ -35,6 +35,15 @@ export interface Candidate {
   followUpDate: string;
   nextAction: NextAction;
   timestamp: string;
+  batchId?: string;
+}
+
+export interface Batch {
+  id: string;
+  assignDate: string;
+  totalImported: number;
+  recruiterAssignments: { recruiterId: string; count: number }[];
+  candidateIds: string[];
 }
 
 export interface Client {
@@ -454,9 +463,12 @@ interface CRMStore {
   clients: Client[];
   activityLogs: ActivityLog[];
   signupRequests: SignupRequest[];
+  batches: Batch[];
   crmConfig: CRMConfig;
   currentUser: CurrentUser | null;
   addCandidate: (c: Omit<Candidate, "id" | "timestamp">) => void;
+  addCandidateWithBatch: (c: Omit<Candidate, "id" | "timestamp">) => string;
+  addBatch: (batch: Batch) => void;
   updateCandidate: (id: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (id: string) => void;
   addRecruiter: (
@@ -512,6 +524,9 @@ export function useCRMState() {
   const [signupRequests, setSignupRequests] = useState<SignupRequest[]>(() =>
     loadFromStorage("crm_signups", SEED_SIGNUP_REQUESTS),
   );
+  const [batches, setBatches] = useState<Batch[]>(() =>
+    loadFromStorage("crm_batches", []),
+  );
   const [crmConfig, setCrmConfig] = useState<CRMConfig>(() =>
     loadFromStorage("CRM_CONFIG", { apiUrl: "", sheetId: "" }),
   );
@@ -534,6 +549,9 @@ export function useCRMState() {
   useEffect(() => {
     saveToStorage("crm_signups", signupRequests);
   }, [signupRequests]);
+  useEffect(() => {
+    saveToStorage("crm_batches", batches);
+  }, [batches]);
 
   const setCurrentUser = (user: CurrentUser | null) => {
     setCurrentUserState(user);
@@ -546,8 +564,18 @@ export function useCRMState() {
     clients,
     activityLogs,
     signupRequests,
+    batches,
     crmConfig,
     currentUser,
+    addBatch: (batch) => setBatches((prev) => [...prev, batch]),
+    addCandidateWithBatch: (c) => {
+      const id = genId("C");
+      setCandidates((prev) => [
+        ...prev,
+        { ...c, id, timestamp: new Date().toISOString().split("T")[0] },
+      ]);
+      return id;
+    },
     addCandidate: (c) =>
       setCandidates((prev) => [
         ...prev,
