@@ -95,7 +95,7 @@ function useCounter(end: number, duration = 2000, suffix = "") {
 }
 
 // ─── Navbar ──────────────────────────────────────────────────────
-function Navbar() {
+function Navbar({ onLogin }: { onLogin?: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -169,6 +169,18 @@ function Navbar() {
               ),
             )}
             <Button
+              data-ocid="nav.login.button"
+              onClick={onLogin}
+              variant="outline"
+              className="font-semibold px-5 py-2 rounded-lg border-2 transition-all duration-200"
+              style={{
+                borderColor: "oklch(0.55 0.17 245)",
+                color: "oklch(0.55 0.17 245)",
+              }}
+            >
+              Login
+            </Button>
+            <Button
               data-ocid="nav.request_proposal.button"
               onClick={() => scrollTo("contact")}
               className="bg-brand-blue hover:bg-brand-navy text-white font-semibold px-5 py-2 rounded-lg shadow-navy transition-all duration-200"
@@ -218,6 +230,21 @@ function Navbar() {
                 </button>
               ),
             )}
+            <Button
+              data-ocid="nav.mobile.login.button"
+              onClick={() => {
+                setIsOpen(false);
+                onLogin?.();
+              }}
+              variant="outline"
+              className="w-full mt-2 font-semibold border-2"
+              style={{
+                borderColor: "oklch(0.55 0.17 245)",
+                color: "oklch(0.55 0.17 245)",
+              }}
+            >
+              Login
+            </Button>
             <Button
               data-ocid="nav.mobile.request_proposal.button"
               onClick={() => scrollTo("contact")}
@@ -1693,25 +1720,478 @@ function WhatsAppButton() {
   );
 }
 
-// ─── Main App ────────────────────────────────────────────────────
-export default function App() {
-  useScrollReveal();
+// ─── CRM Imports ─────────────────────────────────────────────────
+import AdminCRM from "./components/AdminCRM";
+import RecruiterPanel from "./components/RecruiterPanel";
+import { CRMContext, type CurrentUser, useCRMState } from "./hooks/useCRMStore";
+
+// ─── Page Type ───────────────────────────────────────────────────
+type PageType =
+  | "home"
+  | "login"
+  | "adminDashboard"
+  | "recruiterDashboard"
+  | "recruiterSignup";
+
+// ─── Login Page ──────────────────────────────────────────────────
+function LoginPage({
+  onNavigate,
+  onLoginSuccess,
+}: {
+  onNavigate: (page: PageType) => void;
+  onLoginSuccess: (user: CurrentUser) => void;
+}) {
+  const [selectedRole, setSelectedRole] = useState<
+    "admin" | "recruiter" | null
+  >(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
+  const [signupForm, setSignupForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+  const [signupMsg, setSignupMsg] = useState("");
+
+  const handleLogin = () => {
+    setError("");
+    setLoading(true);
+    setTimeout(() => {
+      if (
+        selectedRole === "admin" &&
+        username === "Utkarsh809071" &&
+        password === "U80907120"
+      ) {
+        onLoginSuccess({
+          role: "admin",
+          id: "admin",
+          name: "Admin",
+          email: "admin@hirevena.com",
+        });
+        onNavigate("adminDashboard");
+      } else if (selectedRole === "recruiter") {
+        const stored = localStorage.getItem("crm_recruiters");
+        const recruiters = stored ? JSON.parse(stored) : [];
+        const found = recruiters.find(
+          (r: {
+            email: string;
+            password: string;
+            status: string;
+            id: string;
+            name: string;
+          }) =>
+            r.email === username &&
+            r.password === password &&
+            r.status === "approved",
+        );
+        if (found) {
+          onLoginSuccess({
+            role: "recruiter",
+            id: found.id,
+            name: found.name,
+            email: found.email,
+          });
+          onNavigate("recruiterDashboard");
+        } else {
+          setError("Invalid credentials or account not yet approved.");
+        }
+      } else {
+        setError("Invalid credentials. Please try again.");
+      }
+      setLoading(false);
+    }, 600);
+  };
+
+  const handleSignupSubmit = () => {
+    if (!signupForm.name || !signupForm.email || !signupForm.password) return;
+    const stored = localStorage.getItem("crm_signups");
+    const existing = stored ? JSON.parse(stored) : [];
+    const newReq = {
+      id: `SR${Date.now().toString(36).toUpperCase()}`,
+      name: signupForm.name,
+      email: signupForm.email,
+      password: signupForm.password,
+      requestedAt: new Date().toISOString().split("T")[0],
+    };
+    localStorage.setItem("crm_signups", JSON.stringify([...existing, newReq]));
+    const storedR = localStorage.getItem("crm_recruiters");
+    const recruiters = storedR ? JSON.parse(storedR) : [];
+    recruiters.push({
+      id: newReq.id,
+      name: newReq.name,
+      email: newReq.email,
+      password: newReq.password,
+      status: "pending",
+      calls: 0,
+      interested: 0,
+      notInterested: 0,
+      followUps: 0,
+    });
+    localStorage.setItem("crm_recruiters", JSON.stringify(recruiters));
+    setSignupMsg(
+      "Request submitted! Admin will review and approve your account.",
+    );
+    setShowSignup(false);
+    setSignupForm({ name: "", email: "", password: "" });
+  };
 
   return (
-    <div className="min-h-screen bg-white font-body">
-      <Navbar />
-      <main>
-        <HeroSection />
-        <TestimonialsSection />
-        <AboutSection />
-        <ServicesSection />
-        <ProcessSection />
-        <IndustriesSection />
-        <ResultsSection />
-        <LeadCaptureSection />
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: "oklch(0.97 0.01 245)" }}
+    >
+      <header className="bg-white shadow-sm py-4 px-6 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => onNavigate("home")}
+          className="font-display font-black text-xl tracking-tight"
+          style={{ color: "oklch(0.28 0.085 245)" }}
+        >
+          Hirevena
+        </button>
+        <button
+          type="button"
+          data-ocid="login.back.button"
+          onClick={() => onNavigate("home")}
+          className="flex items-center gap-2 text-sm font-medium hover:opacity-70"
+          style={{ color: "oklch(0.55 0.17 245)" }}
+        >
+          ← Back to Website
+        </button>
+      </header>
+
+      <main className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-2xl">
+          <div className="text-center mb-10">
+            <h1
+              className="font-display font-black text-3xl md:text-4xl mb-3"
+              style={{ color: "oklch(0.28 0.085 245)" }}
+            >
+              Welcome Back
+            </h1>
+            <p className="text-foreground/60 text-lg">
+              Choose your role to continue
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
+            <button
+              type="button"
+              data-ocid="login.admin.card"
+              onClick={() => {
+                setSelectedRole("admin");
+                setError("");
+                setShowSignup(false);
+                setSignupMsg("");
+              }}
+              className={`relative rounded-2xl p-7 text-left border-2 transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer ${selectedRole === "admin" ? "border-blue-600 bg-white shadow-md" : "border-transparent bg-white hover:border-blue-200"}`}
+            >
+              {selectedRole === "admin" && (
+                <div
+                  className="absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ background: "oklch(0.55 0.17 245)" }}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+              )}
+              <div
+                className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "oklch(0.92 0.06 245)" }}
+              >
+                <Shield
+                  className="w-7 h-7"
+                  style={{ color: "oklch(0.45 0.17 245)" }}
+                />
+              </div>
+              <h3
+                className="font-display font-bold text-lg mb-2"
+                style={{ color: "oklch(0.28 0.085 245)" }}
+              >
+                Login as Admin
+              </h3>
+              <p className="text-sm text-foreground/60">
+                Full access to leads, analytics, and system settings.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              data-ocid="login.recruiter.card"
+              onClick={() => {
+                setSelectedRole("recruiter");
+                setError("");
+              }}
+              className={`relative rounded-2xl p-7 text-left border-2 transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer ${selectedRole === "recruiter" ? "border-blue-600 bg-white shadow-md" : "border-transparent bg-white hover:border-blue-200"}`}
+            >
+              {selectedRole === "recruiter" && (
+                <div
+                  className="absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center"
+                  style={{ background: "oklch(0.55 0.17 245)" }}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+              )}
+              <div
+                className="w-14 h-14 rounded-xl flex items-center justify-center mb-4"
+                style={{ background: "oklch(0.93 0.04 160)" }}
+              >
+                <Users
+                  className="w-7 h-7"
+                  style={{ color: "oklch(0.45 0.15 160)" }}
+                />
+              </div>
+              <h3
+                className="font-display font-bold text-lg mb-2"
+                style={{ color: "oklch(0.28 0.085 245)" }}
+              >
+                Login as Recruiter
+              </h3>
+              <p className="text-sm text-foreground/60">
+                Manage assigned leads, candidates, and interviews.
+              </p>
+            </button>
+          </div>
+
+          {signupMsg && (
+            <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm text-center">
+              {signupMsg}
+            </div>
+          )}
+
+          {selectedRole && !showSignup && (
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-border">
+              <h2
+                className="font-display font-bold text-xl mb-6"
+                style={{ color: "oklch(0.28 0.085 245)" }}
+              >
+                {selectedRole === "admin" ? "Admin Login" : "Recruiter Login"}
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <Label
+                    htmlFor="login-username"
+                    className="text-sm font-medium mb-1.5 block"
+                  >
+                    {selectedRole === "admin" ? "Admin ID" : "Email Address"}
+                  </Label>
+                  <Input
+                    id="login-username"
+                    data-ocid="login.username.input"
+                    type={selectedRole === "admin" ? "text" : "email"}
+                    placeholder={
+                      selectedRole === "admin"
+                        ? "Enter Admin ID"
+                        : "Enter email"
+                    }
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    className="h-11"
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="login-password"
+                    className="text-sm font-medium mb-1.5 block"
+                  >
+                    Password
+                  </Label>
+                  <Input
+                    id="login-password"
+                    data-ocid="login.password.input"
+                    type="password"
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    className="h-11"
+                  />
+                </div>
+                {error && (
+                  <p
+                    data-ocid="login.error_state"
+                    className="text-sm text-red-600 font-medium flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4" /> {error}
+                  </p>
+                )}
+                <Button
+                  data-ocid="login.submit_button"
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="w-full h-11 font-semibold text-base mt-2"
+                  style={{ background: "oklch(0.55 0.17 245)" }}
+                >
+                  {loading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    "Login"
+                  )}
+                </Button>
+              </div>
+              {selectedRole === "recruiter" && (
+                <div className="mt-4 text-center">
+                  <button
+                    type="button"
+                    data-ocid="login.request_access.button"
+                    onClick={() => setShowSignup(true)}
+                    className="text-sm font-medium hover:underline"
+                    style={{ color: "oklch(0.55 0.17 245)" }}
+                  >
+                    Don't have access? Request Access →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showSignup && selectedRole === "recruiter" && (
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-border">
+              <h2
+                className="font-display font-bold text-xl mb-6"
+                style={{ color: "oklch(0.28 0.085 245)" }}
+              >
+                Request Recruiter Access
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <Label>Full Name</Label>
+                  <Input
+                    data-ocid="signup.name.input"
+                    value={signupForm.name}
+                    onChange={(e) =>
+                      setSignupForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                    placeholder="Your full name"
+                    className="h-11 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    data-ocid="signup.email.input"
+                    value={signupForm.email}
+                    onChange={(e) =>
+                      setSignupForm((f) => ({ ...f, email: e.target.value }))
+                    }
+                    placeholder="your@email.com"
+                    className="h-11 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Desired Password</Label>
+                  <Input
+                    type="password"
+                    data-ocid="signup.password.input"
+                    value={signupForm.password}
+                    onChange={(e) =>
+                      setSignupForm((f) => ({ ...f, password: e.target.value }))
+                    }
+                    placeholder="Create a password"
+                    className="h-11 mt-1"
+                  />
+                </div>
+                <Button
+                  data-ocid="signup.submit_button"
+                  onClick={handleSignupSubmit}
+                  className="w-full h-11 font-semibold"
+                  style={{ background: "oklch(0.55 0.17 245)" }}
+                >
+                  Submit Request
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSignup(false)}
+                  className="w-full h-11"
+                  data-ocid="signup.cancel_button"
+                >
+                  Back to Login
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
+    </div>
+  );
+}
+
+// ─── Home Layout ─────────────────────────────────────────────────
+function HomeLayout({ onLogin }: { onLogin: () => void }) {
+  useScrollReveal();
+  return (
+    <div>
+      <Navbar onLogin={onLogin} />
+      <HeroSection />
+      <ResultsSection />
+      <ServicesSection />
+      <ProcessSection />
+      <IndustriesSection />
+      <AboutSection />
+      <TestimonialsSection />
+      <LeadCaptureSection />
       <Footer />
       <WhatsAppButton />
     </div>
+  );
+}
+// ─── App ─────────────────────────────────────────────────────────
+export default function App() {
+  const crmStore = useCRMState();
+  const [currentPage, setCurrentPage] = useState<PageType>(() => {
+    const session = localStorage.getItem("crm_session");
+    if (session) {
+      try {
+        const user: CurrentUser = JSON.parse(session);
+        if (user?.role === "admin") return "adminDashboard";
+        if (user?.role === "recruiter") return "recruiterDashboard";
+      } catch {}
+    }
+    return "home";
+  });
+
+  const handleLogout = () => {
+    crmStore.setCurrentUser(null);
+    setCurrentPage("home");
+  };
+
+  if (currentPage === "login") {
+    return (
+      <CRMContext.Provider value={crmStore}>
+        <LoginPage
+          onNavigate={setCurrentPage}
+          onLoginSuccess={(user) => crmStore.setCurrentUser(user)}
+        />
+      </CRMContext.Provider>
+    );
+  }
+
+  if (currentPage === "adminDashboard") {
+    return (
+      <CRMContext.Provider value={crmStore}>
+        <AdminCRM onLogout={handleLogout} />
+      </CRMContext.Provider>
+    );
+  }
+
+  if (currentPage === "recruiterDashboard" && crmStore.currentUser) {
+    return (
+      <CRMContext.Provider value={crmStore}>
+        <RecruiterPanel
+          currentUser={crmStore.currentUser}
+          onLogout={handleLogout}
+        />
+      </CRMContext.Provider>
+    );
+  }
+
+  return (
+    <CRMContext.Provider value={crmStore}>
+      <HomeLayout onLogin={() => setCurrentPage("login")} />
+    </CRMContext.Provider>
   );
 }
