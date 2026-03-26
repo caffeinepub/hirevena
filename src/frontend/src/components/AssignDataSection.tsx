@@ -133,13 +133,6 @@ export default function AssignDataSection() {
   // Tracking state
   const [viewBatch, setViewBatch] = useState<string | null>(null);
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
-  const [, setTick] = useState(0);
-
-  // Auto-refresh
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 4000);
-    return () => clearInterval(t);
-  }, []);
 
   const approvedRecruiters = store.recruiters.filter(
     (r) => r.status === "approved",

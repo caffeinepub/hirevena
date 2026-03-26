@@ -170,7 +170,6 @@ export default function RecruiterPanel({ currentUser, onLogout }: Props) {
 // ── Calling Data Tab ───────────────────────────────────────────────
 function CallingDataTab({ recruiterId }: { recruiterId: string }) {
   const store = useCRMStore();
-  const [, setTick] = useState(0);
   const [statusFilter, setStatusFilter] = useState("All");
   const [timeFilter, setTimeFilter] = useState("All");
   const [responseCandidate, setResponseCandidate] = useState<Candidate | null>(
@@ -184,12 +183,6 @@ function CallingDataTab({ recruiterId }: { recruiterId: string }) {
   });
   const [followUpError, setFollowUpError] = useState("");
   const [toast, setToast] = useState("");
-
-  // Auto-refresh every 4 seconds
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 4000);
-    return () => clearInterval(interval);
-  }, []);
 
   const today = new Date().toISOString().split("T")[0];
 
