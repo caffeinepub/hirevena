@@ -11,6 +11,16 @@ export type CandidateStatus =
   | "Duplicate";
 export type NextAction = "Call" | "WhatsApp" | "Interview";
 
+export interface Campaign {
+  id: string;
+  campaignName: string;
+  companyName: string;
+  role: string;
+  location: string;
+  salary: string;
+  createdAt: string;
+}
+
 export interface Recruiter {
   id: string;
   name: string;
@@ -35,7 +45,10 @@ export interface Candidate {
   followUpDate: string;
   nextAction: NextAction;
   timestamp: string;
+  /** ISO datetime set ONLY when recruiter submits a response */
+  updatedAt?: string;
   batchId?: string;
+  campaign?: string;
 }
 
 export interface Batch {
@@ -44,6 +57,7 @@ export interface Batch {
   totalImported: number;
   recruiterAssignments: { recruiterId: string; count: number }[];
   candidateIds: string[];
+  campaign?: string;
 }
 
 export interface Client {
@@ -144,18 +158,16 @@ const SEED_RECRUITERS: Recruiter[] = [
 ];
 
 const SEED_CANDIDATES: Candidate[] = [];
-
 const SEED_CLIENTS: Client[] = [];
-
 const SEED_LOGS: ActivityLog[] = [];
-
 const SEED_SIGNUP_REQUESTS: SignupRequest[] = [];
+const SEED_CAMPAIGNS: Campaign[] = [];
 
-const STORAGE_VERSION = "v3_clean";
+// Bump version to clear old stale data (counters, fake statuses)
+const STORAGE_VERSION = "v6_updatedAt";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
-    // Version migration: clear old data if version mismatch
     const storedVersion = localStorage.getItem("crm_version");
     if (storedVersion !== STORAGE_VERSION) {
       localStorage.clear();
@@ -173,6 +185,24 @@ function saveToStorage(key: string, value: unknown) {
   } catch {}
 }
 
+/** Returns today's date as YYYY-MM-DD */
+export function todayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+/** Recompute recruiter stats purely from the candidates array */
+function computeStats(r: Recruiter, allCandidates: Candidate[]): Recruiter {
+  const rc = allCandidates.filter((c) => c.assignedRecruiter === r.id);
+  // A "call" = recruiter actually submitted a response (updatedAt is set)
+  return {
+    ...r,
+    calls: rc.filter((c) => !!c.updatedAt).length,
+    interested: rc.filter((c) => c.status === "Interested").length,
+    notInterested: rc.filter((c) => c.status === "Not Interested").length,
+    followUps: rc.filter((c) => c.status === "Follow-up").length,
+  };
+}
+
 interface CRMStore {
   recruiters: Recruiter[];
   candidates: Candidate[];
@@ -180,11 +210,13 @@ interface CRMStore {
   activityLogs: ActivityLog[];
   signupRequests: SignupRequest[];
   batches: Batch[];
+  campaigns: Campaign[];
   crmConfig: CRMConfig;
   currentUser: CurrentUser | null;
   addCandidate: (c: Omit<Candidate, "id" | "timestamp">) => void;
   addCandidateWithBatch: (c: Omit<Candidate, "id" | "timestamp">) => string;
   addBatch: (batch: Batch) => void;
+  addCampaign: (c: Omit<Campaign, "id" | "createdAt">) => void;
   updateCandidate: (id: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (id: string) => void;
   addRecruiter: (
@@ -243,6 +275,9 @@ export function useCRMState() {
   const [batches, setBatches] = useState<Batch[]>(() =>
     loadFromStorage("crm_batches", []),
   );
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() =>
+    loadFromStorage("crm_campaigns", SEED_CAMPAIGNS),
+  );
   const [crmConfig, setCrmConfig] = useState<CRMConfig>(() =>
     loadFromStorage("CRM_CONFIG", { apiUrl: "", sheetId: "" }),
   );
@@ -268,6 +303,16 @@ export function useCRMState() {
   useEffect(() => {
     saveToStorage("crm_batches", batches);
   }, [batches]);
+  useEffect(() => {
+    saveToStorage("crm_campaigns", campaigns);
+  }, [campaigns]);
+
+  // On mount: recalculate all recruiter stats from stored candidates.
+  // This corrects any stale data saved by older storage versions.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
+  useEffect(() => {
+    setRecruiters((prevR) => prevR.map((r) => computeStats(r, candidates)));
+  }, []);
 
   const setCurrentUser = (user: CurrentUser | null) => {
     setCurrentUserState(user);
@@ -281,14 +326,30 @@ export function useCRMState() {
     activityLogs,
     signupRequests,
     batches,
+    campaigns,
     crmConfig,
     currentUser,
     addBatch: (batch) => setBatches((prev) => [...prev, batch]),
+    addCampaign: (c) =>
+      setCampaigns((prev) => [
+        ...prev,
+        {
+          ...c,
+          id: genId("CAM"),
+          createdAt: new Date().toISOString().split("T")[0],
+        },
+      ]),
     addCandidateWithBatch: (c) => {
       const id = genId("C");
       setCandidates((prev) => [
         ...prev,
-        { ...c, id, timestamp: new Date().toISOString().split("T")[0] },
+        {
+          ...c,
+          id,
+          status: "New" as CandidateStatus, // always start as New (shows as Pending)
+          updatedAt: undefined, // no response yet
+          timestamp: new Date().toISOString().split("T")[0],
+        },
       ]);
       return id;
     },
@@ -297,14 +358,31 @@ export function useCRMState() {
         ...prev,
         {
           ...c,
+          status: "New" as CandidateStatus,
+          updatedAt: undefined,
           id: genId("C"),
           timestamp: new Date().toISOString().split("T")[0],
         },
       ]),
-    updateCandidate: (id, updates) =>
-      setCandidates((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-      ),
+    updateCandidate: (id, updates) => {
+      // If status is being changed by recruiter, stamp updatedAt
+      const isRecruiterResponse =
+        updates.status !== undefined &&
+        updates.status !== "New" &&
+        (updates.status as string) !== "";
+      const finalUpdates: Partial<Candidate> = isRecruiterResponse
+        ? { ...updates, updatedAt: new Date().toLocaleString("en-IN") }
+        : updates;
+
+      setCandidates((prev) => {
+        const next = prev.map((c) =>
+          c.id === id ? { ...c, ...finalUpdates } : c,
+        );
+        // Recompute recruiter stats from fresh candidates array
+        setRecruiters((prevR) => prevR.map((r) => computeStats(r, next)));
+        return next;
+      });
+    },
     deleteCandidate: (id) =>
       setCandidates((prev) => prev.filter((c) => c.id !== id)),
     addRecruiter: (r) =>

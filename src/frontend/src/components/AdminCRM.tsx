@@ -58,6 +58,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  type Campaign,
   type Candidate,
   type Client,
   type Recruiter,
@@ -267,7 +268,7 @@ export default function AdminCRM({ onLogout }: { onLogout: () => void }) {
 
 // ── Dashboard ──────────────────────────────────────────────────────
 function DashboardSection() {
-  const { recruiters, candidates, activityLogs } = useCRMStore();
+  const { recruiters, candidates, campaigns } = useCRMStore();
   const today = new Date().toISOString().split("T")[0];
 
   const approvedRecruiters = recruiters.filter((r) => r.status === "approved");
@@ -295,9 +296,9 @@ function DashboardSection() {
     (c) => c.followUpDate && c.followUpDate < today,
   ).length;
 
-  const todayLogs = activityLogs.filter((l) => l.timestamp.startsWith(today));
-  const callsToday = todayLogs.filter((l) =>
-    l.action.toLowerCase().includes("call"),
+  const todayLocale = new Date().toLocaleDateString("en-IN");
+  const callsToday = candidates.filter((c) =>
+    c.updatedAt?.startsWith(todayLocale),
   ).length;
 
   // blue: oklch(0.55 0.17 245)
@@ -473,6 +474,96 @@ function DashboardSection() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Campaign Performance */}
+      <div className="bg-white rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <h3
+            className="font-semibold text-sm"
+            style={{ color: "oklch(0.28 0.085 245)" }}
+          >
+            📊 Campaign Performance
+          </h3>
+        </div>
+        {campaigns.length === 0 ? (
+          <div className="px-4 py-8 text-center text-foreground/40 text-sm">
+            No campaigns created yet. Go to Assign Data to create a campaign.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/50">
+                  {[
+                    "Campaign",
+                    "Company",
+                    "Role",
+                    "Total Leads",
+                    "Interested",
+                    "Not Interested",
+                    "Pending",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-2.5 text-left text-xs font-semibold text-foreground/60 uppercase whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {campaigns.map((camp: Campaign, i: number) => {
+                  const campCandidates = candidates.filter(
+                    (c) => c.campaign === camp.campaignName,
+                  );
+                  const total = campCandidates.length;
+                  const interested = campCandidates.filter(
+                    (c) => c.status === "Interested",
+                  ).length;
+                  const notInterested = campCandidates.filter(
+                    (c) => c.status === "Not Interested",
+                  ).length;
+                  const pending = campCandidates.filter(
+                    (c) => !c.status || c.status === "New",
+                  ).length;
+                  return (
+                    <tr
+                      key={camp.id}
+                      className={i % 2 === 0 ? "" : "bg-muted/30"}
+                    >
+                      <td
+                        className="px-4 py-2.5 font-semibold"
+                        style={{ color: "oklch(0.28 0.085 245)" }}
+                      >
+                        {camp.campaignName}
+                      </td>
+                      <td className="px-4 py-2.5 text-foreground/70">
+                        {camp.companyName || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-foreground/70">
+                        {camp.role || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 font-bold text-blue-700">
+                        {total}
+                      </td>
+                      <td className="px-4 py-2.5 font-bold text-green-600">
+                        {interested}
+                      </td>
+                      <td className="px-4 py-2.5 font-bold text-red-500">
+                        {notInterested}
+                      </td>
+                      <td className="px-4 py-2.5 font-bold text-orange-500">
+                        {pending}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -16,11 +16,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ArrowLeft,
   BarChart3,
+  Briefcase,
+  Building2,
   ChevronDown,
   ChevronUp,
   Download,
   FileSpreadsheet,
+  IndianRupee,
+  MapPin,
+  Plus,
   RefreshCw,
   Upload,
 } from "lucide-react";
@@ -38,8 +44,36 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import * as XLSX from "xlsx";
-import { type Batch, useCRMStore } from "../hooks/useCRMStore";
+// XLSX loaded dynamically from CDN
+declare global {
+  interface Window {
+    XLSX?: {
+      read: (
+        data: ArrayBuffer,
+        opts: { type: string },
+      ) => {
+        SheetNames: string[];
+        Sheets: Record<string, unknown>;
+      };
+      utils: {
+        sheet_to_json: <T>(sheet: unknown, opts: { header: number }) => T[];
+      };
+    };
+  }
+}
+
+async function loadXLSX(): Promise<NonNullable<Window["XLSX"]>> {
+  if (window.XLSX) return window.XLSX;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src =
+      "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    script.onload = () => resolve(window.XLSX!);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+import { type Batch, type Campaign, useCRMStore } from "../hooks/useCRMStore";
 
 interface ParsedRow {
   name: string;
@@ -57,7 +91,6 @@ function generateBatchId(count: number): string {
   return `BATCH_${y}_${m}_${day}_${seq}`;
 }
 
-// Parse rows from a header+data array (used for both CSV and Excel)
 function parseRowsFromArray(dataArr: string[][]): ParsedRow[] {
   if (dataArr.length < 2) return [];
   const header = dataArr[0].map((h) =>
@@ -103,7 +136,8 @@ function parseCSVText(text: string): ParsedRow[] {
   return parseRowsFromArray(dataArr);
 }
 
-function parseExcelBuffer(buffer: ArrayBuffer): ParsedRow[] {
+async function parseExcelBuffer(buffer: ArrayBuffer): Promise<ParsedRow[]> {
+  const XLSX = await loadXLSX();
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
@@ -115,12 +149,29 @@ function parseExcelBuffer(buffer: ArrayBuffer): ParsedRow[] {
 
 const PAGE_SIZE = 15;
 
+const EMPTY_CAMPAIGN_FORM = {
+  campaignName: "",
+  companyName: "",
+  role: "",
+  location: "",
+  salary: "",
+};
+
 export default function AssignDataSection() {
   const store = useCRMStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"import" | "tracking">("import");
+  const [tab, setTab] = useState<"campaigns" | "tracking">("campaigns");
 
-  // Import state
+  // Campaign list / detail view state
+  const [view, setView] = useState<"list" | "detail">("list");
+  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
+
+  // Campaign modal
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [campaignForm, setCampaignForm] = useState(EMPTY_CAMPAIGN_FORM);
+  const [campaignFormError, setCampaignFormError] = useState("");
+
+  // Import state (per detail view)
   const [importedRows, setImportedRows] = useState<ParsedRow[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -133,17 +184,47 @@ export default function AssignDataSection() {
   // Tracking state
   const [viewBatch, setViewBatch] = useState<string | null>(null);
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
+  const [campaignFilter, setCampaignFilter] = useState("");
+
+  // Auto-refresh tracking tab
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((p) => p + 1), 4000);
+    return () => clearInterval(t);
+  }, []);
+  void tick;
 
   const approvedRecruiters = store.recruiters.filter(
     (r) => r.status === "approved",
   );
 
-  // Pagination
+  const selectedCampaign = activeCampaign?.campaignName || "";
+
   const totalPages = Math.max(1, Math.ceil(importedRows.length / PAGE_SIZE));
   const pagedRows = importedRows.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
+
+  const openCampaignDetail = (campaign: Campaign) => {
+    setActiveCampaign(campaign);
+    setView("detail");
+    setImportedRows([]);
+    setSelected([]);
+    setSelectedRecruiter("");
+    setError("");
+    setAssignSuccess("");
+    setCurrentPage(1);
+  };
+
+  const backToList = () => {
+    setView("list");
+    setActiveCampaign(null);
+    setImportedRows([]);
+    setSelected([]);
+    setError("");
+    setAssignSuccess("");
+  };
 
   // CSV / Excel file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,10 +240,10 @@ export default function AssignDataSection() {
     const reader = new FileReader();
 
     if (isExcel) {
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         try {
           const buffer = ev.target?.result as ArrayBuffer;
-          const rows = parseExcelBuffer(buffer);
+          const rows = await parseExcelBuffer(buffer);
           if (rows.length === 0) {
             setError(
               "No valid data found. Ensure Excel has Name and Mobile columns.",
@@ -231,8 +312,30 @@ export default function AssignDataSection() {
     }
   };
 
+  // Create Campaign
+  const handleCreateCampaign = () => {
+    if (!campaignForm.campaignName.trim()) {
+      setCampaignFormError("Campaign name is required.");
+      return;
+    }
+    store.addCampaign({
+      campaignName: campaignForm.campaignName.trim(),
+      companyName: campaignForm.companyName.trim(),
+      role: campaignForm.role.trim(),
+      location: campaignForm.location.trim(),
+      salary: campaignForm.salary.trim(),
+    });
+    setShowCampaignModal(false);
+    setCampaignForm(EMPTY_CAMPAIGN_FORM);
+    setCampaignFormError("");
+  };
+
   // Assign
   const handleAssign = () => {
+    if (!selectedCampaign) {
+      setError("Campaign not selected.");
+      return;
+    }
     if (!selectedRecruiter) {
       setError("Please select a recruiter.");
       return;
@@ -259,6 +362,7 @@ export default function AssignDataSection() {
         followUpDate: "",
         nextAction: "Call",
         batchId,
+        campaign: selectedCampaign,
       });
       addedIds.push(id);
     }
@@ -271,17 +375,18 @@ export default function AssignDataSection() {
         { recruiterId: selectedRecruiter, count: selected.length },
       ],
       candidateIds: addedIds,
+      campaign: selectedCampaign,
     });
 
     store.addActivityLog({
       recruiterId: "admin",
       recruiterName: "Admin",
       action: "Batch Assigned",
-      details: `${batchId}: ${selected.length} candidates → ${approvedRecruiters.find((r) => r.id === selectedRecruiter)?.name}`,
+      details: `${batchId}: ${selected.length} candidates → ${approvedRecruiters.find((r) => r.id === selectedRecruiter)?.name} [${selectedCampaign}]`,
     });
 
     setAssignSuccess(
-      `${batchId} — ${selected.length} candidates assigned successfully!`,
+      `${batchId} — ${selected.length} candidates assigned to ${selectedCampaign} successfully!`,
     );
     setImportedRows((prev) => prev.filter((_, i) => !selected.includes(i)));
     setSelected([]);
@@ -293,7 +398,7 @@ export default function AssignDataSection() {
   const getBatchStats = (batch: Batch) => {
     const candidates = store.candidates.filter((c) => c.batchId === batch.id);
     const total = candidates.length;
-    const callsDone = candidates.filter((c) => c.status !== "New").length;
+    const callsDone = candidates.filter((c) => !!c.updatedAt).length;
     const interested = candidates.filter(
       (c) => c.status === "Interested",
     ).length;
@@ -322,7 +427,7 @@ export default function AssignDataSection() {
       const batchCands = store.candidates.filter(
         (c) => c.batchId === batch.id && c.assignedRecruiter === recruiterId,
       );
-      const callsDone = batchCands.filter((c) => c.status !== "New").length;
+      const callsDone = batchCands.filter((c) => !!c.updatedAt).length;
       const interested = batchCands.filter(
         (c) => c.status === "Interested",
       ).length;
@@ -337,11 +442,10 @@ export default function AssignDataSection() {
     });
   };
 
-  // Export
   const exportBatchSummaryCSV = (batch: Batch) => {
     const stats = getBatchStats(batch);
     const recruiterStats = getRecruiterStats(batch);
-    let csv = `Batch ID,${batch.id}\nAssign Date,${batch.assignDate}\nTotal Assigned,${stats.total}\nCalls Done,${stats.callsDone}\nInterested,${stats.interested}\nNot Interested,${stats.notInterested}\nFollow-ups,${stats.followUps}\nConversion %,${stats.convPct}%\n\nRecruiter Name,Assigned,Calls Done,Interested,Conversion%\n`;
+    let csv = `Batch ID,${batch.id}\nCampaign,${batch.campaign || ""}\nAssign Date,${batch.assignDate}\nTotal Assigned,${stats.total}\nCalls Done,${stats.callsDone}\nInterested,${stats.interested}\nNot Interested,${stats.notInterested}\nFollow-ups,${stats.followUps}\nConversion %,${stats.convPct}%\n\nRecruiter Name,Assigned,Calls Done,Interested,Conversion%\n`;
     for (const r of recruiterStats) {
       csv += `${r.name},${r.assigned},${r.callsDone},${r.interested},${r.convPct}%\n`;
     }
@@ -351,11 +455,11 @@ export default function AssignDataSection() {
   const exportBatchDetailedCSV = (batch: Batch) => {
     const candidates = store.candidates.filter((c) => c.batchId === batch.id);
     let csv =
-      "Name,Phone,Email,Skills,Status,Recruiter,Notes,Follow-up Date,Timestamp\n";
+      "Name,Phone,Email,Skills,Status,Campaign,Recruiter,Notes,Follow-up Date,Timestamp\n";
     for (const c of candidates) {
       const recruiterName =
         store.recruiters.find((r) => r.id === c.assignedRecruiter)?.name || "";
-      csv += `${c.name},${c.phone},${c.email},${c.skills},${c.status},${recruiterName},${c.notes},${c.followUpDate},${c.timestamp}\n`;
+      csv += `${c.name},${c.phone},${c.email},${c.skills},${c.status},${c.campaign || ""},${recruiterName},${c.notes},${c.followUpDate},${c.timestamp}\n`;
     }
     downloadCSV(csv, `${batch.id}_detailed.csv`);
   };
@@ -384,6 +488,7 @@ export default function AssignDataSection() {
         .stat-val { font-size: 24px; font-weight: bold; color: #1a365d; }
       </style></head><body>
         <h1>Batch Report — ${batch.id}</h1>
+        <p>Campaign: <strong>${batch.campaign || "—"}</strong></p>
         <p>Date: ${batch.assignDate}</p>
         <h2>Summary</h2>
         <div>
@@ -414,11 +519,29 @@ export default function AssignDataSection() {
     }
   };
 
+  // Filtered batches for tracking tab
+  const filteredBatches = campaignFilter
+    ? store.batches.filter((b) => b.campaign === campaignFilter)
+    : store.batches;
+
+  // Campaign stats summary for list view
+  const getCampaignSummary = (campaignName: string) => {
+    const batches = store.batches.filter((b) => b.campaign === campaignName);
+    const total = batches.reduce((sum, b) => sum + b.totalImported, 0);
+    const candidates = store.candidates.filter(
+      (c) => c.campaign === campaignName,
+    );
+    const interested = candidates.filter(
+      (c) => c.status === "Interested",
+    ).length;
+    return { total, interested, batchCount: batches.length };
+  };
+
   return (
     <div className="space-y-5">
       {/* Tab Switcher */}
       <div className="flex gap-2">
-        {(["import", "tracking"] as const).map((t) => (
+        {(["campaigns", "tracking"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -430,271 +553,531 @@ export default function AssignDataSection() {
             }`}
             style={tab === t ? { background: "oklch(0.55 0.17 245)" } : {}}
           >
-            {t === "import" ? "📥 Import & Assign" : "📊 Live Tracking"}
+            {t === "campaigns" ? "📋 Campaigns" : "📊 Live Tracking"}
           </button>
         ))}
       </div>
 
-      {tab === "import" && (
-        <div className="space-y-5">
-          {/* Import Methods */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* CSV/Excel Upload */}
-            <div className="bg-white rounded-xl border border-border p-5">
-              <h3
-                className="font-semibold text-sm mb-3 flex items-center gap-2"
-                style={{ color: "oklch(0.28 0.085 245)" }}
-              >
-                <Upload className="w-4 h-4" /> Upload CSV / Excel
-              </h3>
-              <p className="text-xs text-foreground/50 mb-3">
-                Required columns: Name, Phone · Optional: Email, Skills
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                className="w-full h-10 text-sm"
-              >
-                <Upload className="w-4 h-4 mr-2" /> Choose File
-              </Button>
-            </div>
-
-            {/* Google Sheets */}
-            <div className="bg-white rounded-xl border border-border p-5">
-              <h3
-                className="font-semibold text-sm mb-3 flex items-center gap-2"
-                style={{ color: "oklch(0.28 0.085 245)" }}
-              >
-                <FileSpreadsheet className="w-4 h-4" /> Import from Google
-                Sheets
-              </h3>
-              <p className="text-xs text-foreground/50 mb-3">
-                Sheet must be publicly shared (View access)
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder={store.crmConfig.sheetId || "Enter Sheet ID"}
-                  value={gsSheetId}
-                  onChange={(e) => setGsSheetId(e.target.value)}
-                  className="h-10 text-sm"
-                />
-                <Button
-                  onClick={handleGSImport}
-                  disabled={loading}
-                  className="h-10 whitespace-nowrap text-sm"
-                  style={{ background: "oklch(0.55 0.17 245)" }}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* CAMPAIGNS TAB                                             */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {tab === "campaigns" && (
+        <>
+          {/* ── CAMPAIGN LIST VIEW ── */}
+          {view === "list" && (
+            <div className="space-y-5">
+              {/* Header row */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3
+                    className="font-bold text-base"
+                    style={{ color: "oklch(0.28 0.085 245)" }}
+                  >
+                    All Campaigns
+                  </h3>
+                  <p className="text-xs text-foreground/50 mt-0.5">
+                    Select a campaign to upload data and assign recruiters
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-ocid="assign.new_campaign.button"
+                  onClick={() => setShowCampaignModal(true)}
+                  className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg text-white shadow-sm hover:opacity-90 transition-opacity"
+                  style={{ background: "oklch(0.45 0.15 160)" }}
                 >
-                  {loading ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    "Import"
-                  )}
-                </Button>
+                  <Plus className="w-4 h-4" /> New Campaign
+                </button>
               </div>
-            </div>
-          </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-          {assignSuccess && (
-            <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 font-medium">
-              ✅ {assignSuccess}
-            </div>
-          )}
-
-          {/* Assign Bar */}
-          {importedRows.length > 0 && (
-            <div className="bg-white rounded-xl border border-border p-4 sticky top-[80px] z-10 shadow-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm font-medium text-foreground/60">
-                  {selected.length} of {importedRows.length} selected
-                </span>
-                <Select
-                  value={selectedRecruiter}
-                  onValueChange={setSelectedRecruiter}
+              {/* Empty state */}
+              {store.campaigns.length === 0 ? (
+                <div
+                  data-ocid="assign.campaigns.empty_state"
+                  className="bg-white rounded-xl border-2 border-dashed border-blue-200 p-16 text-center space-y-4"
                 >
-                  <SelectTrigger className="w-48 h-9">
-                    <SelectValue placeholder="Select Recruiter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {approvedRecruiters.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  onClick={handleAssign}
-                  disabled={selected.length === 0 || !selectedRecruiter}
-                  className="h-9 text-sm font-semibold"
-                  style={{ background: "oklch(0.45 0.20 145)" }}
-                >
-                  Assign Data ({selected.length})
-                </Button>
-                <span className="text-xs text-foreground/40 ml-auto">
-                  Batch ID: {generateBatchId(store.batches.length)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Preview Table */}
-          {importedRows.length > 0 && (
-            <div className="bg-white rounded-xl border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                <h3
-                  className="font-semibold text-sm"
-                  style={{ color: "oklch(0.28 0.085 245)" }}
-                >
-                  Data Preview — {importedRows.length} records
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50">
-                      <th className="w-10 px-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selected.length === importedRows.length}
-                          onChange={(e) =>
-                            setSelected(
-                              e.target.checked
-                                ? importedRows.map((_, i) => i)
-                                : [],
-                            )
-                          }
-                        />
-                      </th>
-                      {["#", "Name", "Phone", "Email", "Skills"].map((h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-2.5 text-left text-xs font-semibold text-foreground/60 uppercase"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedRows.map((row, pi) => {
-                      const globalIdx = (currentPage - 1) * PAGE_SIZE + pi;
-                      return (
-                        <tr
-                          key={globalIdx}
-                          className={pi % 2 === 0 ? "" : "bg-muted/30"}
-                        >
-                          <td className="px-3 py-2">
-                            <input
-                              type="checkbox"
-                              checked={selected.includes(globalIdx)}
-                              onChange={(e) =>
-                                setSelected((prev) =>
-                                  e.target.checked
-                                    ? [...prev, globalIdx]
-                                    : prev.filter((i) => i !== globalIdx),
-                                )
-                              }
-                            />
-                          </td>
-                          <td className="px-3 py-2 text-foreground/40 text-xs">
-                            {globalIdx + 1}
-                          </td>
-                          <td className="px-3 py-2 font-medium">{row.name}</td>
-                          <td className="px-3 py-2 text-foreground/70">
-                            {row.phone}
-                          </td>
-                          <td className="px-3 py-2 text-foreground/60">
-                            {row.email || "—"}
-                          </td>
-                          <td className="px-3 py-2 text-foreground/60">
-                            {row.skills || "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="px-4 py-3 border-t border-border flex items-center justify-between text-sm">
-                  <span className="text-foreground/50 text-xs">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage((p) => p - 1)}
-                    >
-                      Prev
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      disabled={currentPage === totalPages}
-                      onClick={() => setCurrentPage((p) => p + 1)}
-                    >
-                      Next
-                    </Button>
+                  <div className="text-4xl">🎯</div>
+                  <div>
+                    <p className="font-semibold text-foreground/70">
+                      No campaigns yet
+                    </p>
+                    <p className="text-sm text-foreground/40 mt-1">
+                      Create a campaign to start uploading and assigning
+                      candidate data
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCampaignModal(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg text-white"
+                    style={{ background: "oklch(0.55 0.17 245)" }}
+                  >
+                    <Plus className="w-4 h-4" /> Create First Campaign
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {store.campaigns.map((campaign) => {
+                    const summary = getCampaignSummary(campaign.campaignName);
+                    return (
+                      <button
+                        key={campaign.id}
+                        type="button"
+                        data-ocid={"assign.campaign.card"}
+                        onClick={() => openCampaignDetail(campaign)}
+                        className="bg-white rounded-xl border-2 border-border hover:border-blue-400 hover:shadow-md p-5 text-left transition-all group"
+                      >
+                        {/* Campaign name */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p
+                              className="font-bold text-sm group-hover:text-blue-700 transition-colors"
+                              style={{ color: "oklch(0.28 0.085 245)" }}
+                            >
+                              🎯 {campaign.campaignName}
+                            </p>
+                            {summary.batchCount > 0 && (
+                              <p className="text-xs text-foreground/40 mt-0.5">
+                                {summary.batchCount} batch
+                                {summary.batchCount !== 1 ? "es" : ""} ·{" "}
+                                {summary.total} candidates
+                              </p>
+                            )}
+                          </div>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{
+                              background: "oklch(0.95 0.05 245)",
+                              color: "oklch(0.45 0.15 245)",
+                            }}
+                          >
+                            Upload Data →
+                          </span>
+                        </div>
+
+                        {/* Badge row */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {campaign.companyName && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                              <Building2 className="w-3 h-3" />
+                              {campaign.companyName}
+                            </span>
+                          )}
+                          {campaign.role && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
+                              <Briefcase className="w-3 h-3" />
+                              {campaign.role}
+                            </span>
+                          )}
+                          {campaign.location && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                              <MapPin className="w-3 h-3" />
+                              {campaign.location}
+                            </span>
+                          )}
+                          {campaign.salary && (
+                            <span className="inline-flex items-center gap-1 text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">
+                              <IndianRupee className="w-3 h-3" />
+                              {campaign.salary}
+                            </span>
+                          )}
+                        </div>
+
+                        {summary.total > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border/50 flex gap-4">
+                            <span className="text-xs text-foreground/50">
+                              Total:{" "}
+                              <strong className="text-foreground/80">
+                                {summary.total}
+                              </strong>
+                            </span>
+                            <span className="text-xs text-foreground/50">
+                              Interested:{" "}
+                              <strong className="text-green-600">
+                                {summary.interested}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {importedRows.length === 0 && !assignSuccess && (
-            <div className="bg-white rounded-xl border border-border p-12 text-center">
-              <Upload className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="text-foreground/40">
-                Upload a CSV file or import from Google Sheets to get started
-              </p>
+          {/* ── CAMPAIGN DETAIL VIEW ── */}
+          {view === "detail" && activeCampaign && (
+            <div className="space-y-5">
+              {/* Back + campaign header */}
+              <div className="bg-white rounded-xl border-2 border-blue-200 p-5">
+                <button
+                  type="button"
+                  data-ocid="assign.back.button"
+                  onClick={backToList}
+                  className="flex items-center gap-1.5 text-sm text-blue-600 font-semibold hover:text-blue-800 transition-colors mb-3"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back to Campaigns
+                </button>
+                <h3
+                  className="font-bold text-base mb-2"
+                  style={{ color: "oklch(0.28 0.085 245)" }}
+                >
+                  🎯 {activeCampaign.campaignName}
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {activeCampaign.companyName && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                      <Building2 className="w-3 h-3" />
+                      {activeCampaign.companyName}
+                    </span>
+                  )}
+                  {activeCampaign.role && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
+                      <Briefcase className="w-3 h-3" />
+                      {activeCampaign.role}
+                    </span>
+                  )}
+                  {activeCampaign.location && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                      <MapPin className="w-3 h-3" />
+                      {activeCampaign.location}
+                    </span>
+                  )}
+                  {activeCampaign.salary && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">
+                      <IndianRupee className="w-3 h-3" />
+                      {activeCampaign.salary}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Import Methods */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <h3
+                    className="font-semibold text-sm mb-3 flex items-center gap-2"
+                    style={{ color: "oklch(0.28 0.085 245)" }}
+                  >
+                    <Upload className="w-4 h-4" /> Upload CSV / Excel
+                  </h3>
+                  <p className="text-xs text-foreground/50 mb-3">
+                    Required columns: Name, Phone · Optional: Email, Skills
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    data-ocid="assign.upload.button"
+                    onClick={() => fileInputRef.current?.click()}
+                    variant="outline"
+                    className="w-full h-10 text-sm"
+                  >
+                    <Upload className="w-4 h-4 mr-2" /> Choose File
+                  </Button>
+                </div>
+
+                <div className="bg-white rounded-xl border border-border p-5">
+                  <h3
+                    className="font-semibold text-sm mb-3 flex items-center gap-2"
+                    style={{ color: "oklch(0.28 0.085 245)" }}
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Import from Google
+                    Sheets
+                  </h3>
+                  <p className="text-xs text-foreground/50 mb-3">
+                    Sheet must be publicly shared (View access)
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="assign.sheets_id.input"
+                      placeholder={store.crmConfig.sheetId || "Enter Sheet ID"}
+                      value={gsSheetId}
+                      onChange={(e) => setGsSheetId(e.target.value)}
+                      className="h-10 text-sm"
+                    />
+                    <Button
+                      data-ocid="assign.sheets_import.button"
+                      onClick={handleGSImport}
+                      disabled={loading}
+                      className="h-10 whitespace-nowrap text-sm"
+                      style={{ background: "oklch(0.55 0.17 245)" }}
+                    >
+                      {loading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Import"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div
+                  data-ocid="assign.error_state"
+                  className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-600"
+                >
+                  {error}
+                </div>
+              )}
+              {assignSuccess && (
+                <div
+                  data-ocid="assign.success_state"
+                  className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 font-medium"
+                >
+                  ✅ {assignSuccess}
+                </div>
+              )}
+
+              {/* Sticky Assign Bar */}
+              {importedRows.length > 0 && (
+                <div className="bg-white rounded-xl border border-border p-4 sticky top-[80px] z-10 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-medium text-foreground/60">
+                      {selected.length} of {importedRows.length} selected
+                    </span>
+                    <span
+                      className="text-xs px-2 py-1 rounded-full font-medium text-white"
+                      style={{ background: "oklch(0.55 0.17 245)" }}
+                    >
+                      🎯 {selectedCampaign}
+                    </span>
+                    <Select
+                      value={selectedRecruiter}
+                      onValueChange={setSelectedRecruiter}
+                    >
+                      <SelectTrigger
+                        data-ocid="assign.recruiter.select"
+                        className="w-48 h-9"
+                      >
+                        <SelectValue placeholder="Select Recruiter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {approvedRecruiters.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      data-ocid="assign.data.submit_button"
+                      onClick={handleAssign}
+                      disabled={selected.length === 0 || !selectedRecruiter}
+                      className="h-9 text-sm font-semibold"
+                      style={{ background: "oklch(0.45 0.20 145)" }}
+                    >
+                      Assign Data ({selected.length})
+                    </Button>
+                    <span className="text-xs text-foreground/40 ml-auto">
+                      Batch ID: {generateBatchId(store.batches.length)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              {importedRows.length > 0 && (
+                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                    <h3
+                      className="font-semibold text-sm"
+                      style={{ color: "oklch(0.28 0.085 245)" }}
+                    >
+                      Data Preview — {importedRows.length} records
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="w-10 px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={selected.length === importedRows.length}
+                              onChange={(e) =>
+                                setSelected(
+                                  e.target.checked
+                                    ? importedRows.map((_, i) => i)
+                                    : [],
+                                )
+                              }
+                            />
+                          </th>
+                          {["#", "Name", "Phone", "Email", "Skills"].map(
+                            (h) => (
+                              <th
+                                key={h}
+                                className="px-3 py-2.5 text-left text-xs font-semibold text-foreground/60 uppercase"
+                              >
+                                {h}
+                              </th>
+                            ),
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedRows.map((row, pi) => {
+                          const globalIdx = (currentPage - 1) * PAGE_SIZE + pi;
+                          return (
+                            <tr
+                              key={globalIdx}
+                              className={pi % 2 === 0 ? "" : "bg-muted/30"}
+                            >
+                              <td className="px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(globalIdx)}
+                                  onChange={(e) =>
+                                    setSelected((prev) =>
+                                      e.target.checked
+                                        ? [...prev, globalIdx]
+                                        : prev.filter((i) => i !== globalIdx),
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-foreground/40 text-xs">
+                                {globalIdx + 1}
+                              </td>
+                              <td className="px-3 py-2 font-medium">
+                                {row.name}
+                              </td>
+                              <td className="px-3 py-2 text-foreground/70">
+                                {row.phone}
+                              </td>
+                              <td className="px-3 py-2 text-foreground/60">
+                                {row.email || "—"}
+                              </td>
+                              <td className="px-3 py-2 text-foreground/60">
+                                {row.skills || "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="px-4 py-3 border-t border-border flex items-center justify-between text-sm">
+                      <span className="text-foreground/50 text-xs">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage((p) => p - 1)}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage((p) => p + 1)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* TRACKING TAB                                              */}
+      {/* ══════════════════════════════════════════════════════════ */}
       {tab === "tracking" && (
-        <div className="space-y-5">
-          <div className="flex items-center gap-2">
-            <BarChart3
-              className="w-5 h-5"
-              style={{ color: "oklch(0.55 0.17 245)" }}
-            />
-            <h2
-              className="font-bold text-base"
+        <div className="space-y-4">
+          {/* Live indicator */}
+          <div className="flex items-center justify-between">
+            <h3
+              className="font-bold text-sm"
               style={{ color: "oklch(0.28 0.085 245)" }}
             >
-              Batch Tracking — Live
-            </h2>
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-green-600 font-medium">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />{" "}
-              Auto-refreshing
+              <BarChart3 className="w-4 h-4 inline mr-1" />
+              Live Batch Analytics
+            </h3>
+            <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Auto-refresh
             </span>
           </div>
 
-          {store.batches.length === 0 && (
-            <div className="bg-white rounded-xl border border-border p-10 text-center text-foreground/40">
-              No batches assigned yet. Import and assign data first.
+          {/* Campaign Filter */}
+          {store.campaigns.length > 0 && (
+            <div className="bg-white rounded-xl border border-border p-3">
+              <p className="text-xs font-semibold text-foreground/50 uppercase mb-2">
+                Filter by Campaign
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCampaignFilter("")}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${
+                    !campaignFilter
+                      ? "text-white border-transparent"
+                      : "bg-white border-border text-foreground/60"
+                  }`}
+                  style={
+                    !campaignFilter
+                      ? { background: "oklch(0.55 0.17 245)" }
+                      : {}
+                  }
+                >
+                  All Campaigns
+                </button>
+                {store.campaigns.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCampaignFilter(c.campaignName)}
+                    className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${
+                      campaignFilter === c.campaignName
+                        ? "text-white border-transparent"
+                        : "bg-white border-border text-foreground/60"
+                    }`}
+                    style={
+                      campaignFilter === c.campaignName
+                        ? { background: "oklch(0.55 0.17 245)" }
+                        : {}
+                    }
+                  >
+                    {c.campaignName}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {store.batches.map((batch) => {
+          {filteredBatches.length === 0 && (
+            <div
+              data-ocid="assign.batches.empty_state"
+              className="bg-white rounded-xl border border-border p-12 text-center text-foreground/40"
+            >
+              No batches found
+              {campaignFilter
+                ? ` for "${campaignFilter}"`
+                : ". Import and assign data to get started."}
+            </div>
+          )}
+
+          {[...filteredBatches].reverse().map((batch) => {
             const stats = getBatchStats(batch);
             const recruiterStats = getRecruiterStats(batch);
             const isExpanded = expandedBatch === batch.id;
@@ -722,11 +1105,11 @@ export default function AssignDataSection() {
             return (
               <div
                 key={batch.id}
+                data-ocid={`assign.batch.item.${batch.id}`}
                 className={`bg-white rounded-xl border overflow-hidden transition-all ${
                   isSelected ? "border-blue-400 shadow-md" : "border-border"
                 }`}
               >
-                {/* Batch Header */}
                 <button
                   type="button"
                   className="w-full px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 text-left"
@@ -739,10 +1122,20 @@ export default function AssignDataSection() {
                     >
                       {batch.id}
                     </p>
-                    <p className="text-xs text-foreground/50">
-                      Assigned: {batch.assignDate} · {stats.total} candidates ·{" "}
-                      {stats.convPct}% conversion
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      {batch.campaign && (
+                        <span
+                          className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
+                          style={{ background: "oklch(0.55 0.17 245)" }}
+                        >
+                          🎯 {batch.campaign}
+                        </span>
+                      )}
+                      <p className="text-xs text-foreground/50">
+                        {batch.assignDate} · {stats.total} candidates ·{" "}
+                        {stats.convPct}% conversion
+                      </p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span
@@ -771,7 +1164,6 @@ export default function AssignDataSection() {
 
                 {isExpanded && (
                   <div className="border-t border-border p-5 space-y-5">
-                    {/* Stats Grid */}
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                       {[
                         ["Total", stats.total, "text-blue-700"],
@@ -799,7 +1191,6 @@ export default function AssignDataSection() {
                       ))}
                     </div>
 
-                    {/* Chart + Recruiter Table */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <h4 className="text-xs font-semibold text-foreground/60 uppercase mb-2">
@@ -856,7 +1247,6 @@ export default function AssignDataSection() {
                       </div>
                     </div>
 
-                    {/* Recruiter Table */}
                     <div>
                       <h4 className="text-xs font-semibold text-foreground/60 uppercase mb-2">
                         Recruiter-wise Breakdown
@@ -895,7 +1285,13 @@ export default function AssignDataSection() {
                                 {r.interested}
                               </td>
                               <td
-                                className={`px-3 py-2 font-semibold ${r.convPct >= 20 ? "text-green-600" : r.convPct >= 10 ? "text-yellow-600" : "text-red-500"}`}
+                                className={`px-3 py-2 font-semibold ${
+                                  r.convPct >= 20
+                                    ? "text-green-600"
+                                    : r.convPct >= 10
+                                      ? "text-yellow-600"
+                                      : "text-red-500"
+                                }`}
                               >
                                 {r.convPct}%
                               </td>
@@ -905,7 +1301,6 @@ export default function AssignDataSection() {
                       </table>
                     </div>
 
-                    {/* Export Buttons */}
                     <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
                       <Button
                         size="sm"
@@ -940,6 +1335,103 @@ export default function AssignDataSection() {
           })}
         </div>
       )}
+
+      {/* Create Campaign Modal */}
+      <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
+        <DialogContent data-ocid="assign.campaign.modal" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>🎯 Create New Campaign</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="font-semibold">
+                Campaign Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                data-ocid="assign.campaign_name.input"
+                placeholder="e.g. ITI Recruitment Drive 2026"
+                value={campaignForm.campaignName}
+                onChange={(e) =>
+                  setCampaignForm((f) => ({
+                    ...f,
+                    campaignName: e.target.value,
+                  }))
+                }
+              />
+              {campaignFormError && (
+                <p className="text-xs text-red-500 mt-1">{campaignFormError}</p>
+              )}
+            </div>
+            <div>
+              <Label className="font-semibold">Company Name</Label>
+              <Input
+                data-ocid="assign.campaign_company.input"
+                placeholder="e.g. Tata Motors"
+                value={campaignForm.companyName}
+                onChange={(e) =>
+                  setCampaignForm((f) => ({
+                    ...f,
+                    companyName: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label className="font-semibold">Role / Position</Label>
+              <Input
+                data-ocid="assign.campaign_role.input"
+                placeholder="e.g. Welder, Fitter, Operator"
+                value={campaignForm.role}
+                onChange={(e) =>
+                  setCampaignForm((f) => ({ ...f, role: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label className="font-semibold">Location</Label>
+              <Input
+                data-ocid="assign.campaign_location.input"
+                placeholder="e.g. Pune, Maharashtra"
+                value={campaignForm.location}
+                onChange={(e) =>
+                  setCampaignForm((f) => ({ ...f, location: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label className="font-semibold">Salary</Label>
+              <Input
+                data-ocid="assign.campaign_salary.input"
+                placeholder="e.g. ₹18,000 – ₹25,000/month"
+                value={campaignForm.salary}
+                onChange={(e) =>
+                  setCampaignForm((f) => ({ ...f, salary: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              data-ocid="assign.campaign.cancel_button"
+              onClick={() => {
+                setShowCampaignModal(false);
+                setCampaignForm(EMPTY_CAMPAIGN_FORM);
+                setCampaignFormError("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="assign.campaign.confirm_button"
+              onClick={handleCreateCampaign}
+              style={{ background: "oklch(0.55 0.17 245)" }}
+            >
+              Create Campaign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
