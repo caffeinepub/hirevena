@@ -160,7 +160,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543210",
     email: "arjun@gmail.com",
     skills: "Welding, Fabrication",
-    status: "Interested",
+    status: "New",
     assignedRecruiter: "R001",
     notes: "Strong candidate",
     followUpDate: today,
@@ -173,7 +173,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543211",
     email: "sunita@gmail.com",
     skills: "Electrician, Wiring",
-    status: "Follow-up",
+    status: "New",
     assignedRecruiter: "R001",
     notes: "Needs to confirm",
     followUpDate: pastOverdue,
@@ -186,7 +186,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543212",
     email: "ravi@gmail.com",
     skills: "Plumbing, Maintenance",
-    status: "Called",
+    status: "New",
     assignedRecruiter: "R002",
     notes: "Called twice",
     followUpDate: tomorrow,
@@ -212,7 +212,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543214",
     email: "deepak@gmail.com",
     skills: "CNC Machine, Lathe",
-    status: "Not Interested",
+    status: "New",
     assignedRecruiter: "R003",
     notes: "Not looking",
     followUpDate: "",
@@ -225,7 +225,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543215",
     email: "kavita@gmail.com",
     skills: "Packaging, Assembly",
-    status: "Interested",
+    status: "New",
     assignedRecruiter: "R003",
     notes: "Ready for interview",
     followUpDate: today,
@@ -238,7 +238,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543216",
     email: "rohit@gmail.com",
     skills: "Forklift, Warehouse",
-    status: "Follow-up",
+    status: "New",
     assignedRecruiter: "R003",
     notes: "Confirm location",
     followUpDate: pastOverdue,
@@ -251,7 +251,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543217",
     email: "anjali@gmail.com",
     skills: "Data Entry, Admin",
-    status: "Called",
+    status: "New",
     assignedRecruiter: "R005",
     notes: "",
     followUpDate: tomorrow,
@@ -277,7 +277,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543219",
     email: "pooja@gmail.com",
     skills: "Stitching, Textile",
-    status: "Interested",
+    status: "New",
     assignedRecruiter: "R001",
     notes: "Very eager",
     followUpDate: tomorrow,
@@ -290,7 +290,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543220",
     email: "manoj@gmail.com",
     skills: "Security, Surveillance",
-    status: "Invalid",
+    status: "New",
     assignedRecruiter: "R002",
     notes: "Wrong number",
     followUpDate: "",
@@ -303,7 +303,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543221",
     email: "rekha@gmail.com",
     skills: "Cooking, Housekeeping",
-    status: "Duplicate",
+    status: "New",
     assignedRecruiter: "R003",
     notes: "Already in system",
     followUpDate: "",
@@ -329,7 +329,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543223",
     email: "nisha@gmail.com",
     skills: "Sales, Marketing",
-    status: "Follow-up",
+    status: "New",
     assignedRecruiter: "R001",
     notes: "Interested in retail",
     followUpDate: today,
@@ -342,7 +342,7 @@ const SEED_CANDIDATES: Candidate[] = [
     phone: "+91 9876543224",
     email: "pramod@gmail.com",
     skills: "ITI Fitter, Mechanic",
-    status: "Called",
+    status: "New",
     assignedRecruiter: "R002",
     notes: "Good fit",
     followUpDate: tomorrow,
@@ -443,8 +443,16 @@ const SEED_SIGNUP_REQUESTS: SignupRequest[] = [
   },
 ];
 
+const STORAGE_VERSION = "v2_pending_fix";
+
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
+    // Version migration: clear old data if version mismatch
+    const storedVersion = localStorage.getItem("crm_version");
+    if (storedVersion !== STORAGE_VERSION) {
+      localStorage.clear();
+      localStorage.setItem("crm_version", STORAGE_VERSION);
+    }
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch {}

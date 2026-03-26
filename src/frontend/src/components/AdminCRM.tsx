@@ -77,7 +77,8 @@ type AdminSection =
   | "assigndata";
 
 const STATUS_COLORS: Record<string, string> = {
-  New: "bg-blue-100 text-blue-700",
+  New: "bg-gray-100 text-gray-500",
+  Pending: "bg-gray-100 text-gray-500",
   Called: "bg-purple-100 text-purple-700",
   Interested: "bg-green-100 text-green-700",
   "Not Interested": "bg-red-100 text-red-700",
@@ -85,6 +86,11 @@ const STATUS_COLORS: Record<string, string> = {
   Invalid: "bg-gray-100 text-gray-500",
   Duplicate: "bg-orange-100 text-orange-700",
 };
+
+function getStatusLabel(status: string): string {
+  if (!status || status === "New") return "Pending";
+  return status;
+}
 
 function StatCard({
   label,
@@ -1003,7 +1009,7 @@ function CandidatesSection() {
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[c.status] || ""}`}
+                      className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[getStatusLabel(c.status)] || "bg-gray-100 text-gray-500"}`}
                     >
                       {c.status}
                     </span>

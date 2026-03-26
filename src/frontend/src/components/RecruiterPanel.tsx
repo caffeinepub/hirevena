@@ -44,7 +44,8 @@ type RecruiterTab =
   | "callingdata";
 
 const STATUS_COLORS: Record<string, string> = {
-  New: "bg-blue-100 text-blue-700",
+  New: "bg-gray-100 text-gray-500",
+  Pending: "bg-gray-100 text-gray-500",
   Called: "bg-purple-100 text-purple-700",
   Interested: "bg-green-100 text-green-700",
   "Not Interested": "bg-red-100 text-red-700",
@@ -63,6 +64,17 @@ const STATUSES = [
   "Duplicate",
 ];
 const ACTIONS = ["Call", "WhatsApp", "Interview"];
+
+// Helper: display label for status
+function getStatusLabel(status: string): string {
+  if (!status || status === "New") return "Pending";
+  return status;
+}
+
+// Helper: is status already finalized by recruiter (disable further response)
+function isStatusFinalized(status: string): boolean {
+  return status === "Interested" || status === "Not Interested";
+}
 
 interface Props {
   currentUser: CurrentUser;
@@ -424,9 +436,9 @@ function CallingDataTab({ recruiterId }: { recruiterId: string }) {
                 <p className="text-xs text-foreground/50">{c.phone}</p>
               </div>
               <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[c.status]}`}
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[getStatusLabel(c.status)] || "bg-gray-100 text-gray-500"}`}
               >
-                {c.status}
+                {getStatusLabel(c.status)}
               </span>
             </div>
 
@@ -467,10 +479,18 @@ function CallingDataTab({ recruiterId }: { recruiterId: string }) {
               <button
                 type="button"
                 data-ocid={`recruiter.callingdata.response.button.${i + 1}`}
-                onClick={() => openResponseModal(c)}
-                className="flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold text-sm border-2 border-border hover:bg-muted transition-colors"
+                onClick={() =>
+                  !isStatusFinalized(c.status) && openResponseModal(c)
+                }
+                disabled={isStatusFinalized(c.status)}
+                title={
+                  isStatusFinalized(c.status)
+                    ? "Status already updated"
+                    : "Submit response"
+                }
+                className={`flex-1 flex items-center justify-center gap-2 h-12 rounded-xl font-bold text-sm border-2 border-border transition-colors ${isStatusFinalized(c.status) ? "opacity-40 cursor-not-allowed" : "hover:bg-muted"}`}
               >
-                📝 Response
+                {isStatusFinalized(c.status) ? "✅ Updated" : "📝 Response"}
               </button>
             </div>
           </div>
@@ -802,9 +822,9 @@ function MyCandidatesTab({ recruiterId }: { recruiterId: string }) {
                 )}
               </div>
               <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[c.status]}`}
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[getStatusLabel(c.status)] || "bg-gray-100 text-gray-500"}`}
               >
-                {c.status}
+                {getStatusLabel(c.status)}
               </span>
             </div>
             <div className="flex items-center gap-3 mb-3">
@@ -1077,9 +1097,9 @@ function FollowUpsTab({ recruiterId }: { recruiterId: string }) {
       <div className="flex items-center justify-between mb-1.5">
         <p className="font-semibold text-sm">{c.name}</p>
         <span
-          className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[c.status]}`}
+          className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[getStatusLabel(c.status)] || "bg-gray-100 text-gray-500"}`}
         >
-          {c.status}
+          {getStatusLabel(c.status)}
         </span>
       </div>
       <p className="text-xs text-foreground/50 mb-2">

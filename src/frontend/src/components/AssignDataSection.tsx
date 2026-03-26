@@ -38,6 +38,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import * as XLSX from "xlsx";
 import { type Batch, useCRMStore } from "../hooks/useCRMStore";
 
 interface ParsedRow {
@@ -56,27 +57,27 @@ function generateBatchId(count: number): string {
   return `BATCH_${y}_${m}_${day}_${seq}`;
 }
 
-function parseCSVText(text: string): ParsedRow[] {
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return [];
-  // Detect header
-  const header = lines[0]
-    .toLowerCase()
-    .split(",")
-    .map((h) => h.trim().replace(/"/g, ""));
+// Parse rows from a header+data array (used for both CSV and Excel)
+function parseRowsFromArray(dataArr: string[][]): ParsedRow[] {
+  if (dataArr.length < 2) return [];
+  const header = dataArr[0].map((h) =>
+    String(h || "")
+      .toLowerCase()
+      .trim(),
+  );
   const nameIdx = header.findIndex((h) => h.includes("name"));
   const phoneIdx = header.findIndex(
     (h) => h.includes("phone") || h.includes("mobile") || h.includes("contact"),
   );
   const emailIdx = header.findIndex((h) => h.includes("email"));
-  const skillsIdx = header.findIndex((h) => h.includes("skill"));
+  const skillsIdx = header.findIndex(
+    (h) =>
+      h.includes("skill") || h.includes("trade") || h.includes("qualification"),
+  );
 
   const rows: ParsedRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",").map((c) => c.trim().replace(/"/g, ""));
+  for (let i = 1; i < dataArr.length; i++) {
+    const cols = dataArr[i].map((c) => String(c || "").trim());
     const name = nameIdx >= 0 ? cols[nameIdx] : cols[0];
     const phone = phoneIdx >= 0 ? cols[phoneIdx] : cols[1];
     if (!name || !phone) continue;
@@ -88,6 +89,28 @@ function parseCSVText(text: string): ParsedRow[] {
     });
   }
   return rows;
+}
+
+function parseCSVText(text: string): ParsedRow[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+  const dataArr = lines.map((line) =>
+    line.split(",").map((c) => c.trim().replace(/"/g, "")),
+  );
+  return parseRowsFromArray(dataArr);
+}
+
+function parseExcelBuffer(buffer: ArrayBuffer): ParsedRow[] {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const dataArr = XLSX.utils.sheet_to_json<string[]>(sheet, {
+    header: 1,
+  }) as string[][];
+  return parseRowsFromArray(dataArr);
 }
 
 const PAGE_SIZE = 15;
@@ -129,25 +152,56 @@ export default function AssignDataSection() {
     currentPage * PAGE_SIZE,
   );
 
-  // CSV file upload
+  // CSV / Excel file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
     const file = e.target.files?.[0];
     if (!file) return;
+    const isExcel =
+      file.name.endsWith(".xlsx") ||
+      file.name.endsWith(".xls") ||
+      file.type.includes("spreadsheet") ||
+      file.type.includes("excel");
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const rows = parseCSVText(text);
-      if (rows.length === 0) {
-        setError("No valid data found. Ensure CSV has Name and Phone columns.");
-        return;
-      }
-      setImportedRows(rows);
-      setSelected([]);
-      setCurrentPage(1);
-      setAssignSuccess("");
-    };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.onload = (ev) => {
+        try {
+          const buffer = ev.target?.result as ArrayBuffer;
+          const rows = parseExcelBuffer(buffer);
+          if (rows.length === 0) {
+            setError(
+              "No valid data found. Ensure Excel has Name and Mobile columns.",
+            );
+            return;
+          }
+          setImportedRows(rows);
+          setSelected([]);
+          setCurrentPage(1);
+          setAssignSuccess("");
+        } catch {
+          setError("Failed to read Excel file. Please try again.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        const rows = parseCSVText(text);
+        if (rows.length === 0) {
+          setError(
+            "No valid data found. Ensure CSV has Name and Phone columns.",
+          );
+          return;
+        }
+        setImportedRows(rows);
+        setSelected([]);
+        setCurrentPage(1);
+        setAssignSuccess("");
+      };
+      reader.readAsText(file);
+    }
     e.target.value = "";
   };
 
