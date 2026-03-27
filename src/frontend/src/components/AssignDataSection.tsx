@@ -157,6 +157,7 @@ const EMPTY_CAMPAIGN_FORM = {
   salary: "",
 };
 
+import { apiPost, getApiUrl } from "../utils/apiService";
 export default function AssignDataSection() {
   const store = useCRMStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -325,6 +326,16 @@ export default function AssignDataSection() {
       location: campaignForm.location.trim(),
       salary: campaignForm.salary.trim(),
     });
+    if (getApiUrl()) {
+      apiPost({
+        type: "createCampaign",
+        campaignName: campaignForm.campaignName.trim(),
+        companyName: campaignForm.companyName.trim(),
+        role: campaignForm.role.trim(),
+        location: campaignForm.location.trim(),
+        salary: campaignForm.salary.trim(),
+      }).catch(console.error);
+    }
     setShowCampaignModal(false);
     setCampaignForm(EMPTY_CAMPAIGN_FORM);
     setCampaignFormError("");
@@ -384,6 +395,26 @@ export default function AssignDataSection() {
       action: "Batch Assigned",
       details: `${batchId}: ${selected.length} candidates → ${approvedRecruiters.find((r) => r.id === selectedRecruiter)?.name} [${selectedCampaign}]`,
     });
+
+    if (getApiUrl()) {
+      const recruiterEmail =
+        approvedRecruiters.find((r) => r.id === selectedRecruiter)?.email ||
+        selectedRecruiter;
+      for (const row of candidatesToAdd) {
+        apiPost({
+          type: "addCandidate",
+          name: row.name,
+          phone: row.phone,
+          email: row.email || "",
+          skills: row.skills || "",
+          assignedTo: recruiterEmail,
+          campaign: selectedCampaign,
+          status: "",
+          batchId,
+          assignDate,
+        }).catch(console.error);
+      }
+    }
 
     setAssignSuccess(
       `${batchId} — ${selected.length} candidates assigned to ${selectedCampaign} successfully!`,

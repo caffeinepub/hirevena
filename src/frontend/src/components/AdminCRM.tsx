@@ -57,6 +57,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useActor } from "../hooks/useActor";
 import {
   type Campaign,
   type Candidate,
@@ -64,6 +65,7 @@ import {
   type Recruiter,
   useCRMStore,
 } from "../hooks/useCRMStore";
+import { apiFetch, apiPost } from "../utils/apiService";
 import AssignDataSection from "./AssignDataSection";
 
 type AdminSection =
@@ -612,7 +614,13 @@ function RecruitersSection() {
                   <Button
                     size="sm"
                     data-ocid="admin.approve.button"
-                    onClick={() => store.approveRecruiter(req.id)}
+                    onClick={() => {
+                      store.approveRecruiter(req.id);
+                      apiPost({
+                        type: "approveRecruiter",
+                        email: req.email,
+                      }).catch(() => {});
+                    }}
                     className="h-8 text-xs bg-green-600 hover:bg-green-700"
                   >
                     <CheckCircle className="w-3 h-3 mr-1" /> Approve
@@ -621,7 +629,13 @@ function RecruitersSection() {
                     size="sm"
                     variant="outline"
                     data-ocid="admin.reject.button"
-                    onClick={() => store.rejectRecruiter(req.id)}
+                    onClick={() => {
+                      store.rejectRecruiter(req.id);
+                      apiPost({
+                        type: "rejectRecruiter",
+                        email: req.email,
+                      }).catch(() => {});
+                    }}
                     className="h-8 text-xs border-red-300 text-red-500 hover:bg-red-50"
                   >
                     <XCircle className="w-3 h-3 mr-1" /> Reject
@@ -1564,6 +1578,50 @@ function ClientsSection() {
 // ── Notifications ──────────────────────────────────────────────────
 function NotificationsSection() {
   const store = useCRMStore();
+  const { actor } = useActor();
+
+  // Fetch pending recruiter requests from ICP canister (cross-device sync)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional one-time fetch
+  useEffect(() => {
+    if (!actor) return;
+    actor
+      .getSignupRequests()
+      .then((requests: any[]) => {
+        const pending = requests.filter((r: any) => r.status === "pending");
+        for (const r of pending) {
+          const alreadyIn = store.signupRequests.find(
+            (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
+          );
+          if (!alreadyIn) {
+            store.addSignupRequest({
+              name: r.name,
+              email: r.email,
+              password: r.password || "",
+            });
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback: try localStorage crm_signups
+        const stored = localStorage.getItem("crm_signups");
+        if (stored) {
+          const reqs = JSON.parse(stored);
+          for (const r of reqs) {
+            const alreadyIn = store.signupRequests.find(
+              (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
+            );
+            if (!alreadyIn) {
+              store.addSignupRequest({
+                name: r.name,
+                email: r.email,
+                password: r.password || "",
+              });
+            }
+          }
+        }
+      });
+  }, [actor]);
+
   return (
     <div className="space-y-3">
       <h2
@@ -1598,7 +1656,30 @@ function NotificationsSection() {
                 <Button
                   size="sm"
                   data-ocid={`notifications.approve.button.${store.signupRequests.indexOf(req) + 1}`}
-                  onClick={() => store.approveRecruiter(req.id)}
+                  onClick={() => {
+                    store.approveRecruiter(req.id);
+                    // Sync approval to canister for cross-device
+                    if (actor)
+                      actor.approveSignupRequest(req.email).catch(() => {});
+                    apiPost({
+                      type: "approveRecruiter",
+                      email: req.email,
+                    }).catch(() => {});
+                    // Update localStorage so recruiter can login on same device
+                    const storedR = localStorage.getItem("crm_recruiters");
+                    const recs = storedR ? JSON.parse(storedR) : [];
+                    const idx = recs.findIndex(
+                      (r: any) =>
+                        r.email.toLowerCase() === req.email.toLowerCase(),
+                    );
+                    if (idx >= 0) {
+                      recs[idx].status = "approved";
+                      localStorage.setItem(
+                        "crm_recruiters",
+                        JSON.stringify(recs),
+                      );
+                    }
+                  }}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   <CheckCircle className="w-4 h-4 mr-1" />
@@ -1608,7 +1689,16 @@ function NotificationsSection() {
                   size="sm"
                   variant="outline"
                   data-ocid={`notifications.reject.button.${store.signupRequests.indexOf(req) + 1}`}
-                  onClick={() => store.rejectRecruiter(req.id)}
+                  onClick={() => {
+                    store.rejectRecruiter(req.id);
+                    // Sync rejection to canister for cross-device
+                    if (actor)
+                      actor.rejectSignupRequest(req.email).catch(() => {});
+                    apiPost({
+                      type: "rejectRecruiter",
+                      email: req.email,
+                    }).catch(() => {});
+                  }}
                   className="border-red-200 text-red-500 hover:bg-red-50"
                 >
                   <XCircle className="w-4 h-4 mr-1" />

@@ -23,8 +23,16 @@ export const Submission = IDL.Record({
   'positions' : IDL.Text,
   'followUpDate' : IDL.Text,
 });
+export const SignupRequest = IDL.Record({
+  'status' : IDL.Text,
+  'password' : IDL.Text,
+  'name' : IDL.Text,
+  'email' : IDL.Text,
+  'requestedAt' : Time,
+});
 
 export const idlService = IDL.Service({
+  'approveSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'createSubmission' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
@@ -32,6 +40,10 @@ export const idlService = IDL.Service({
     ),
   'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
+  'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+  'getSignupRequests' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+  'rejectSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'submitSignupRequest' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'updateLead' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Bool],
@@ -57,8 +69,16 @@ export const idlFactory = ({ IDL }) => {
     'positions' : IDL.Text,
     'followUpDate' : IDL.Text,
   });
+  const SignupRequest = IDL.Record({
+    'status' : IDL.Text,
+    'password' : IDL.Text,
+    'name' : IDL.Text,
+    'email' : IDL.Text,
+    'requestedAt' : Time,
+  });
   
   return IDL.Service({
+    'approveSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'createSubmission' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
@@ -66,6 +86,10 @@ export const idlFactory = ({ IDL }) => {
       ),
     'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
+    'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+    'getSignupRequests' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+    'rejectSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'submitSignupRequest' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'updateLead' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Bool],

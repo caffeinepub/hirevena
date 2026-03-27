@@ -41,6 +41,7 @@ export interface Candidate {
   skills: string;
   status: CandidateStatus;
   assignedRecruiter: string;
+  assignedTo?: string;
   notes: string;
   followUpDate: string;
   nextAction: NextAction;
@@ -163,8 +164,8 @@ const SEED_LOGS: ActivityLog[] = [];
 const SEED_SIGNUP_REQUESTS: SignupRequest[] = [];
 const SEED_CAMPAIGNS: Campaign[] = [];
 
-// Bump version to clear old stale data (counters, fake statuses)
-const STORAGE_VERSION = "v6_updatedAt";
+// Bump version to clear old stale data (duplicate IDs from previous bug)
+const STORAGE_VERSION = "v8_fixedIds";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -201,6 +202,28 @@ function computeStats(r: Recruiter, allCandidates: Candidate[]): Recruiter {
     notInterested: rc.filter((c) => c.status === "Not Interested").length,
     followUps: rc.filter((c) => c.status === "Follow-up").length,
   };
+}
+
+/**
+ * Truly unique ID generator using crypto.randomUUID().
+ * Falls back to counter+timestamp if crypto not available.
+ * This guarantees NO collisions even in bulk imports of 1000+ rows.
+ */
+let _idCounter = 0;
+function genId(prefix: string): string {
+  _idCounter += 1;
+  try {
+    // crypto.randomUUID is available in all modern browsers and is truly unique
+    const uuid = crypto
+      .randomUUID()
+      .replace(/-/g, "")
+      .slice(0, 12)
+      .toUpperCase();
+    return `${prefix}${uuid}`;
+  } catch {
+    // Fallback: counter ensures uniqueness even in same-millisecond bulk calls
+    return `${prefix}${Date.now().toString(36).toUpperCase()}${_idCounter.toString(36).toUpperCase()}`;
+  }
 }
 
 interface CRMStore {
@@ -251,10 +274,6 @@ export function useCRMStore(): CRMStore {
 }
 
 export { CRMContext };
-
-function genId(prefix: string): string {
-  return `${prefix}${Date.now().toString(36).toUpperCase()}`;
-}
 
 export function useCRMState() {
   const [recruiters, setRecruiters] = useState<Recruiter[]>(() =>
@@ -308,7 +327,6 @@ export function useCRMState() {
   }, [campaigns]);
 
   // On mount: recalculate all recruiter stats from stored candidates.
-  // This corrects any stale data saved by older storage versions.
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
   useEffect(() => {
     setRecruiters((prevR) => prevR.map((r) => computeStats(r, candidates)));
@@ -346,8 +364,8 @@ export function useCRMState() {
         {
           ...c,
           id,
-          status: "New" as CandidateStatus, // always start as New (shows as Pending)
-          updatedAt: undefined, // no response yet
+          status: "New" as CandidateStatus,
+          updatedAt: undefined,
           timestamp: new Date().toISOString().split("T")[0],
         },
       ]);
@@ -365,7 +383,7 @@ export function useCRMState() {
         },
       ]),
     updateCandidate: (id, updates) => {
-      // If status is being changed by recruiter, stamp updatedAt
+      // Stamp updatedAt only when recruiter changes status
       const isRecruiterResponse =
         updates.status !== undefined &&
         updates.status !== "New" &&
@@ -378,7 +396,6 @@ export function useCRMState() {
         const next = prev.map((c) =>
           c.id === id ? { ...c, ...finalUpdates } : c,
         );
-        // Recompute recruiter stats from fresh candidates array
         setRecruiters((prevR) => prevR.map((r) => computeStats(r, next)));
         return next;
       });

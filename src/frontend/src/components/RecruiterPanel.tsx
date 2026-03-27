@@ -37,6 +37,7 @@ import {
   type CurrentUser,
   useCRMStore,
 } from "../hooks/useCRMStore";
+import { apiFetch, apiPost, getApiUrl } from "../utils/apiService";
 
 type RecruiterTab =
   | "dashboard"
@@ -123,17 +124,30 @@ export default function RecruiterPanel({ currentUser, onLogout }: Props) {
 
       <main className="flex-1 overflow-y-auto pb-20 px-4 py-4">
         {tab === "dashboard" && (
-          <RecruiterDashboardTab recruiterId={currentUser.id} />
+          <RecruiterDashboardTab
+            recruiterId={currentUser.id}
+            recruiterEmail={currentUser.email}
+          />
         )}
         {tab === "candidates" && (
           <MyCandidatesTab recruiterId={currentUser.id} />
         )}
         {tab === "followups" && <FollowUpsTab recruiterId={currentUser.id} />}
-        {tab === "activity" && <ActivityTab recruiterId={currentUser.id} />}
+        {tab === "activity" && (
+          <ActivityTab
+            recruiterId={currentUser.id}
+            recruiterEmail={currentUser.email}
+          />
+        )}
         {tab === "profile" && (
           <ProfileTab currentUser={currentUser} onLogout={onLogout} />
         )}
-        {tab === "campaigns" && <CampaignsTab recruiterId={currentUser.id} />}
+        {tab === "campaigns" && (
+          <CampaignsTab
+            recruiterId={currentUser.id}
+            recruiterEmail={currentUser.email}
+          />
+        )}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border z-30 flex">
@@ -160,7 +174,10 @@ export default function RecruiterPanel({ currentUser, onLogout }: Props) {
 }
 
 // ── Campaigns Tab (two-view flow) ─────────────────────────────────
-function CampaignsTab({ recruiterId }: { recruiterId: string }) {
+function CampaignsTab({
+  recruiterId,
+  recruiterEmail,
+}: { recruiterId: string; recruiterEmail?: string }) {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(
     null,
   );
@@ -169,6 +186,7 @@ function CampaignsTab({ recruiterId }: { recruiterId: string }) {
     return (
       <CampaignDetailView
         recruiterId={recruiterId}
+        recruiterEmail={recruiterEmail}
         campaign={selectedCampaign}
         onBack={() => setSelectedCampaign(null)}
       />
@@ -178,6 +196,7 @@ function CampaignsTab({ recruiterId }: { recruiterId: string }) {
   return (
     <CampaignListView
       recruiterId={recruiterId}
+      recruiterEmail={recruiterEmail}
       onSelect={setSelectedCampaign}
     />
   );
@@ -186,16 +205,62 @@ function CampaignsTab({ recruiterId }: { recruiterId: string }) {
 // ── Campaign List View ─────────────────────────────────────────────
 function CampaignListView({
   recruiterId,
+  recruiterEmail,
   onSelect,
 }: {
   recruiterId: string;
+  recruiterEmail?: string;
   onSelect: (c: Campaign) => void;
 }) {
   const store = useCRMStore();
+  const [apiCandidates, setApiCandidates] = useState<
+    import("../hooks/useCRMStore").Candidate[]
+  >([]);
+  const [apiCampaigns, setApiCampaigns] = useState<Campaign[]>([]);
 
-  const myCandidates = store.candidates.filter(
-    (c) => c.assignedRecruiter === recruiterId,
-  );
+  useEffect(() => {
+    const loadFromApi = async () => {
+      if (!recruiterEmail || !getApiUrl()) return;
+      const userEmail = recruiterEmail.toLowerCase();
+      console.log("Logged user:", userEmail);
+      try {
+        const [leadsData, campaignsData] = await Promise.all([
+          apiFetch({ type: "leads", recruiter: userEmail }),
+          apiFetch({ type: "campaigns" }),
+        ]);
+        const leads = (leadsData as any)?.data || leadsData || [];
+        const campaigns = (campaignsData as any)?.data || campaignsData || [];
+        console.log("Fetched data:", leads);
+        setApiCandidates(Array.isArray(leads) ? leads : []);
+        setApiCampaigns(Array.isArray(campaigns) ? campaigns : []);
+      } catch (e) {
+        console.error("API fetch error:", e);
+      }
+    };
+    loadFromApi();
+    const interval = setInterval(loadFromApi, 5000);
+    return () => clearInterval(interval);
+  }, [recruiterEmail]);
+
+  const myCandidates =
+    apiCandidates.length > 0
+      ? apiCandidates.filter(
+          (c) =>
+            (
+              (c as any).assignedTo ||
+              c.assignedRecruiter ||
+              ""
+            ).toLowerCase() === (recruiterEmail || "").toLowerCase(),
+        )
+      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
+
+  const allCampaigns = [
+    ...store.campaigns,
+    ...apiCampaigns.filter(
+      (ac) =>
+        !store.campaigns.find((sc) => sc.campaignName === ac.campaignName),
+    ),
+  ];
 
   // Get unique campaign names from my candidates
   const myCampaignNames = Array.from(
@@ -204,7 +269,7 @@ function CampaignListView({
 
   // Map to campaign objects
   const myCampaigns = myCampaignNames.map((name) => {
-    const campaignObj = store.campaigns.find((c) => c.campaignName === name);
+    const campaignObj = allCampaigns.find((c) => c.campaignName === name);
     const leads = myCandidates.filter((c) => c.campaign === name);
     const pending = leads.filter((c) => !c.status || c.status === "New").length;
     const interested = leads.filter((c) => c.status === "Interested").length;
@@ -335,10 +400,12 @@ function CampaignListView({
 // ── Campaign Detail View ──────────────────────────────────────────
 function CampaignDetailView({
   recruiterId,
+  recruiterEmail,
   campaign,
   onBack,
 }: {
   recruiterId: string;
+  recruiterEmail?: string;
   campaign: Campaign;
   onBack: () => void;
 }) {
@@ -350,20 +417,37 @@ function CampaignDetailView({
     "Interested" | "Not Interested"
   >("Interested");
   const [toast, setToast] = useState("");
+  const [apiLeads, setApiLeads] = useState<Candidate[]>([]);
 
-  // Auto-refresh
-  const [tick, setTick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setTick((p) => p + 1), 4000);
-    return () => clearInterval(t);
-  }, []);
-  void tick;
+    const load = async () => {
+      if (!recruiterEmail || !getApiUrl()) return;
+      try {
+        const data = await apiFetch({
+          type: "leads",
+          recruiter: recruiterEmail.toLowerCase(),
+          campaign: campaign.campaignName,
+        });
+        const fetchedLeads = (data as any)?.data || data || [];
+        if (Array.isArray(fetchedLeads)) setApiLeads(fetchedLeads);
+        console.log("Fetched data:", fetchedLeads);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 4000);
+    return () => clearInterval(interval);
+  }, [recruiterEmail, campaign.campaignName]);
 
-  const leads = store.candidates.filter(
-    (c) =>
-      c.assignedRecruiter === recruiterId &&
-      c.campaign === campaign.campaignName,
-  );
+  const leads =
+    apiLeads.length > 0
+      ? apiLeads
+      : store.candidates.filter(
+          (c) =>
+            c.assignedRecruiter === recruiterId &&
+            c.campaign === campaign.campaignName,
+        );
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -372,6 +456,14 @@ function CampaignDetailView({
 
   const handleSubmitResponse = () => {
     if (!responseCandidate) return;
+    if (getApiUrl()) {
+      apiPost({
+        type: "updateCandidate",
+        id: responseCandidate.id,
+        status: responseStatus,
+        updatedAt: new Date().toISOString(),
+      }).catch(console.error);
+    }
     store.updateCandidate(responseCandidate.id, { status: responseStatus });
     store.addActivityLog({
       recruiterId,
@@ -615,26 +707,76 @@ function CampaignDetailView({
 }
 
 // ── Dashboard Tab ───────────────────────────────────────────────────
-function RecruiterDashboardTab({ recruiterId }: { recruiterId: string }) {
+function RecruiterDashboardTab({
+  recruiterId,
+  recruiterEmail,
+}: { recruiterId: string; recruiterEmail?: string }) {
   const { recruiters, candidates, activityLogs } = useCRMStore();
   const recruiter = recruiters.find((r) => r.id === recruiterId);
   const myLogs = activityLogs
     .filter((l) => l.recruiterId === recruiterId)
     .slice(0, 5);
+  const [apiLeads, setApiLeads] = useState<
+    import("../hooks/useCRMStore").Candidate[]
+  >([]);
 
-  const myCandidates = candidates.filter(
-    (c) => c.assignedRecruiter === recruiterId,
-  );
+  useEffect(() => {
+    const load = async () => {
+      if (!recruiterEmail || !getApiUrl()) return;
+      try {
+        const data = await apiFetch({
+          type: "leads",
+          recruiter: recruiterEmail.toLowerCase(),
+        });
+        const leads = (data as any)?.data || data || [];
+        if (Array.isArray(leads) && leads.length > 0) setApiLeads(leads);
+        console.log("Logged user:", recruiterEmail);
+        console.log("Fetched data:", leads);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [recruiterEmail]);
+
+  const myCandidates =
+    apiLeads.length > 0
+      ? apiLeads
+      : candidates.filter((c) => c.assignedRecruiter === recruiterId);
+
   const todayFormatted = new Date().toLocaleDateString("en-IN");
   const callsTodayCount = myCandidates.filter((c) =>
     c.updatedAt?.startsWith(todayFormatted),
   ).length;
+  const interestedCount = myCandidates.filter(
+    (c) => c.status === "Interested",
+  ).length;
+  const notInterestedCount = myCandidates.filter(
+    (c) => c.status === "Not Interested",
+  ).length;
+  const followUpsCount = myCandidates.filter(
+    (c) => c.status === "Follow-up",
+  ).length;
 
   const stats = [
     { label: "Calls Today", value: callsTodayCount },
-    { label: "Interested", value: recruiter?.interested || 0 },
-    { label: "Not Interested", value: recruiter?.notInterested || 0 },
-    { label: "Follow-ups", value: recruiter?.followUps || 0 },
+    {
+      label: "Interested",
+      value: apiLeads.length > 0 ? interestedCount : recruiter?.interested || 0,
+    },
+    {
+      label: "Not Interested",
+      value:
+        apiLeads.length > 0
+          ? notInterestedCount
+          : recruiter?.notInterested || 0,
+    },
+    {
+      label: "Follow-ups",
+      value: apiLeads.length > 0 ? followUpsCount : recruiter?.followUps || 0,
+    },
   ];
 
   return (
@@ -1161,14 +1303,41 @@ function FollowUpsTab({ recruiterId }: { recruiterId: string }) {
 }
 
 // ── Activity Tab ───────────────────────────────────────────────────
-function ActivityTab({ recruiterId }: { recruiterId: string }) {
+function ActivityTab({
+  recruiterId,
+  recruiterEmail,
+}: { recruiterId: string; recruiterEmail?: string }) {
   const { recruiters, candidates, activityLogs } = useCRMStore();
   const recruiter = recruiters.find((r) => r.id === recruiterId);
   const myLogs = activityLogs.filter((l) => l.recruiterId === recruiterId);
+  const [apiLeads, setApiLeads] = useState<
+    import("../hooks/useCRMStore").Candidate[]
+  >([]);
 
-  const myCandidates = candidates.filter(
-    (c) => c.assignedRecruiter === recruiterId && c.updatedAt,
-  );
+  useEffect(() => {
+    const load = async () => {
+      if (!recruiterEmail || !getApiUrl()) return;
+      try {
+        const data = await apiFetch({
+          type: "leads",
+          recruiter: recruiterEmail.toLowerCase(),
+        });
+        const leads = (data as any)?.data || data || [];
+        if (Array.isArray(leads) && leads.length > 0) setApiLeads(leads);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [recruiterEmail]);
+
+  const myCandidates = (
+    apiLeads.length > 0
+      ? apiLeads
+      : candidates.filter((c) => c.assignedRecruiter === recruiterId)
+  ).filter((c) => c.updatedAt);
 
   const last7: {
     date: string;

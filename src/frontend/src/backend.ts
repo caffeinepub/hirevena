@@ -89,6 +89,7 @@ export class ExternalBlob {
         return this;
     }
 }
+export type Time = bigint;
 export interface Submission {
     id: bigint;
     status: string;
@@ -103,15 +104,40 @@ export interface Submission {
     positions: string;
     followUpDate: string;
 }
-export type Time = bigint;
+export interface SignupRequest {
+    status: string;
+    password: string;
+    name: string;
+    email: string;
+    requestedAt: Time;
+}
 export interface backendInterface {
+    approveSignupRequest(email: string): Promise<boolean>;
     createSubmission(companyName: string, contactName: string, phoneNumber: string, emailAddress: string, role: string, positions: string, urgency: string): Promise<void>;
     deleteSubmission(id: bigint): Promise<boolean>;
     getAllSubmissions(): Promise<Array<Submission>>;
+    getApprovedRecruiters(): Promise<Array<SignupRequest>>;
+    getSignupRequests(): Promise<Array<SignupRequest>>;
+    rejectSignupRequest(email: string): Promise<boolean>;
+    submitSignupRequest(name: string, email: string, password: string): Promise<void>;
     updateLead(id: bigint, status: string, notes: string, followUpDate: string): Promise<boolean>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async approveSignupRequest(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.approveSignupRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.approveSignupRequest(arg0);
+            return result;
+        }
+    }
     async createSubmission(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string): Promise<void> {
         if (this.processError) {
             try {
@@ -151,6 +177,62 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getAllSubmissions();
+            return result;
+        }
+    }
+    async getApprovedRecruiters(): Promise<Array<SignupRequest>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getApprovedRecruiters();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getApprovedRecruiters();
+            return result;
+        }
+    }
+    async getSignupRequests(): Promise<Array<SignupRequest>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSignupRequests();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSignupRequests();
+            return result;
+        }
+    }
+    async rejectSignupRequest(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.rejectSignupRequest(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.rejectSignupRequest(arg0);
+            return result;
+        }
+    }
+    async submitSignupRequest(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitSignupRequest(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitSignupRequest(arg0, arg1, arg2);
             return result;
         }
     }

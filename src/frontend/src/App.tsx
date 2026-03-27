@@ -1724,6 +1724,7 @@ function WhatsAppButton() {
 import AdminCRM from "./components/AdminCRM";
 import RecruiterPanel from "./components/RecruiterPanel";
 import { CRMContext, type CurrentUser, useCRMState } from "./hooks/useCRMStore";
+import { apiFetch, apiPost } from "./utils/apiService";
 
 // ─── Page Type ───────────────────────────────────────────────────
 type PageType =
@@ -1755,15 +1756,16 @@ function LoginPage({
     password: "",
   });
   const [signupMsg, setSignupMsg] = useState("");
+  const { actor } = useActor();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError("");
     setLoading(true);
-    setTimeout(() => {
+    try {
       if (
         selectedRole === "admin" &&
-        username === "Utkarsh809071" &&
-        password === "U80907120"
+        username === "UjjwalShakya" &&
+        password === "80907120"
       ) {
         onLoginSuccess({
           role: "admin",
@@ -1775,7 +1777,7 @@ function LoginPage({
       } else if (selectedRole === "recruiter") {
         const stored = localStorage.getItem("crm_recruiters");
         const recruiters = stored ? JSON.parse(stored) : [];
-        const found = recruiters.find(
+        let found = recruiters.find(
           (r: {
             email: string;
             password: string;
@@ -1783,10 +1785,68 @@ function LoginPage({
             id: string;
             name: string;
           }) =>
-            r.email === username &&
+            r.email.toLowerCase() === username.toLowerCase() &&
             r.password === password &&
             r.status === "approved",
         );
+        // Also check API if not found locally (for cross-device sync)
+        if (!found) {
+          try {
+            const apiData = (await apiFetch({ type: "getRecruiters" })) as any;
+            const apiRecruiters = Array.isArray(apiData)
+              ? apiData
+              : apiData?.recruiters || [];
+            found = apiRecruiters.find(
+              (r: {
+                email: string;
+                password: string;
+                status: string;
+                id: string;
+                name: string;
+              }) =>
+                r.email.toLowerCase() === username.toLowerCase() &&
+                r.password === password &&
+                r.status === "approved",
+            );
+          } catch {}
+        }
+        // Also check ICP canister for cross-device approved recruiters
+        if (!found && actor) {
+          try {
+            const approved = await actor.getApprovedRecruiters();
+            const match = approved.find(
+              (r: any) =>
+                r.email.toLowerCase() === username.toLowerCase() &&
+                r.password === password &&
+                r.status === "approved",
+            );
+            if (match) {
+              found = match;
+              // Cache locally so future logins are faster
+              const storedR = localStorage.getItem("crm_recruiters");
+              const recs = storedR ? JSON.parse(storedR) : [];
+              if (
+                !recs.find(
+                  (r: any) =>
+                    r.email.toLowerCase() === match.email.toLowerCase(),
+                )
+              ) {
+                recs.push({
+                  id: `R_${Date.now()}`,
+                  name: match.name,
+                  email: match.email,
+                  password: match.password,
+                  status: "approved",
+                  calls: 0,
+                  interested: 0,
+                  notInterested: 0,
+                  followUps: 0,
+                });
+                localStorage.setItem("crm_recruiters", JSON.stringify(recs));
+              }
+            }
+          } catch {}
+        }
         if (found) {
           onLoginSuccess({
             role: "recruiter",
@@ -1801,36 +1861,85 @@ function LoginPage({
       } else {
         setError("Invalid credentials. Please try again.");
       }
+    } finally {
       setLoading(false);
-    }, 600);
+    }
   };
 
-  const handleSignupSubmit = () => {
+  const handleSignupSubmit = async () => {
     if (!signupForm.name || !signupForm.email || !signupForm.password) return;
-    const stored = localStorage.getItem("crm_signups");
-    const existing = stored ? JSON.parse(stored) : [];
-    const newReq = {
-      id: `SR${Date.now().toString(36).toUpperCase()}`,
-      name: signupForm.name,
-      email: signupForm.email,
-      password: signupForm.password,
-      requestedAt: new Date().toISOString().split("T")[0],
-    };
-    localStorage.setItem("crm_signups", JSON.stringify([...existing, newReq]));
+    // Primary: submit to ICP canister for cross-device sync
+    if (actor) {
+      try {
+        await actor.submitSignupRequest(
+          signupForm.name,
+          signupForm.email,
+          signupForm.password,
+        );
+      } catch {
+        // Canister failed - fall back to localStorage + API only
+        const stored = localStorage.getItem("crm_signups");
+        const existing = stored ? JSON.parse(stored) : [];
+        const newReq = {
+          id: `SR${Date.now().toString(36).toUpperCase()}`,
+          name: signupForm.name,
+          email: signupForm.email,
+          password: signupForm.password,
+          requestedAt: new Date().toISOString().split("T")[0],
+        };
+        localStorage.setItem(
+          "crm_signups",
+          JSON.stringify([...existing, newReq]),
+        );
+        apiPost({
+          type: "signupRecruiter",
+          name: newReq.name,
+          email: newReq.email,
+          password: newReq.password,
+        }).catch(() => {});
+      }
+    } else {
+      // No actor yet - use localStorage + API fallback
+      const stored = localStorage.getItem("crm_signups");
+      const existing = stored ? JSON.parse(stored) : [];
+      const newReq = {
+        id: `SR${Date.now().toString(36).toUpperCase()}`,
+        name: signupForm.name,
+        email: signupForm.email,
+        password: signupForm.password,
+        requestedAt: new Date().toISOString().split("T")[0],
+      };
+      localStorage.setItem(
+        "crm_signups",
+        JSON.stringify([...existing, newReq]),
+      );
+      apiPost({
+        type: "signupRecruiter",
+        name: newReq.name,
+        email: newReq.email,
+        password: newReq.password,
+      }).catch(() => {});
+    }
+    // Always save recruiter as pending in localStorage for local login support
     const storedR = localStorage.getItem("crm_recruiters");
     const recruiters = storedR ? JSON.parse(storedR) : [];
-    recruiters.push({
-      id: newReq.id,
-      name: newReq.name,
-      email: newReq.email,
-      password: newReq.password,
-      status: "pending",
-      calls: 0,
-      interested: 0,
-      notInterested: 0,
-      followUps: 0,
-    });
-    localStorage.setItem("crm_recruiters", JSON.stringify(recruiters));
+    const alreadyExists = recruiters.find(
+      (r: any) => r.email.toLowerCase() === signupForm.email.toLowerCase(),
+    );
+    if (!alreadyExists) {
+      recruiters.push({
+        id: `SR${Date.now().toString(36).toUpperCase()}`,
+        name: signupForm.name,
+        email: signupForm.email,
+        password: signupForm.password,
+        status: "pending",
+        calls: 0,
+        interested: 0,
+        notInterested: 0,
+        followUps: 0,
+      });
+      localStorage.setItem("crm_recruiters", JSON.stringify(recruiters));
+    }
     setSignupMsg(
       "Request submitted! Admin will review and approve your account.",
     );

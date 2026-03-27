@@ -1,8 +1,9 @@
 import Map "mo:core/Map";
-import List "mo:core/List";
+import Nat "mo:core/Nat";
+import Time "mo:core/Time";
 
 module {
-  type OldSubmission = {
+  type Submission = {
     id : Nat;
     companyName : Text;
     contactName : Text;
@@ -11,51 +12,35 @@ module {
     role : Text;
     positions : Text;
     urgency : Text;
-    timestamp : Int;
-  };
-
-  type Input = {
-    submissions : List.List<OldSubmission>;
-  };
-
-  type NewSubmission = {
-    id : Nat;
-    companyName : Text;
-    contactName : Text;
-    phoneNumber : Text;
-    emailAddress : Text;
-    role : Text;
-    positions : Text;
-    urgency : Text;
-    timestamp : Int;
+    timestamp : Time.Time;
     status : Text;
     notes : Text;
     followUpDate : Text;
   };
 
-  type Output = {
-    submissions : Map.Map<Nat, NewSubmission>;
+  type SignupRequest = {
+    name : Text;
+    email : Text;
+    password : Text;
+    requestedAt : Time.Time;
+    status : Text;
+  };
+
+  type OldActor = {
+    submissions : Map.Map<Nat, Submission>;
     nextId : Nat;
   };
 
-  public func run(old : Input) : Output {
-    let newSubmissions = Map.empty<Nat, NewSubmission>();
+  type NewActor = {
+    submissions : Map.Map<Nat, Submission>;
+    signupRequests : Map.Map<Text, SignupRequest>;
+    nextId : Nat;
+  };
 
-    old.submissions.forEach(
-      func(oldSubmission) {
-        let newSubmission : NewSubmission = {
-          oldSubmission with
-          status = "New";
-          notes = "";
-          followUpDate = "";
-        };
-        newSubmissions.add(oldSubmission.id, newSubmission);
-      }
-    );
-
+  public func run(old : OldActor) : NewActor {
     {
-      submissions = newSubmissions;
-      nextId = old.submissions.size();
+      old with
+      signupRequests = Map.empty<Text, SignupRequest>();
     };
   };
 };

@@ -10,6 +10,13 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface SignupRequest {
+  'status' : string,
+  'password' : string,
+  'name' : string,
+  'email' : string,
+  'requestedAt' : Time,
+}
 export interface Submission {
   'id' : bigint,
   'status' : string,
@@ -26,12 +33,17 @@ export interface Submission {
 }
 export type Time = bigint;
 export interface _SERVICE {
+  'approveSignupRequest' : ActorMethod<[string], boolean>,
   'createSubmission' : ActorMethod<
     [string, string, string, string, string, string, string],
     undefined
   >,
   'deleteSubmission' : ActorMethod<[bigint], boolean>,
   'getAllSubmissions' : ActorMethod<[], Array<Submission>>,
+  'getApprovedRecruiters' : ActorMethod<[], Array<SignupRequest>>,
+  'getSignupRequests' : ActorMethod<[], Array<SignupRequest>>,
+  'rejectSignupRequest' : ActorMethod<[string], boolean>,
+  'submitSignupRequest' : ActorMethod<[string, string, string], undefined>,
   'updateLead' : ActorMethod<[bigint, string, string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
