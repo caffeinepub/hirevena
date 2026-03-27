@@ -94,7 +94,7 @@ actor {
       requestedAt = Time.now();
       status = "pending";
     };
-    signupRequests.add(email, newRequest);
+    signupRequests.add(email.toLower(), newRequest);
   };
 
   public query ({ caller }) func getSignupRequests() : async [SignupRequest] {
@@ -103,19 +103,21 @@ actor {
   };
 
   public shared ({ caller }) func approveSignupRequest(email : Text) : async Bool {
-    switch (signupRequests.get(email)) {
+    let key = email.toLower();
+    switch (signupRequests.get(key)) {
       case (null) { false };
       case (?request) {
         let updatedRequest = { request with status = "approved" };
-        signupRequests.add(email, updatedRequest);
+        signupRequests.add(key, updatedRequest);
         true;
       };
     };
   };
 
   public shared ({ caller }) func rejectSignupRequest(email : Text) : async Bool {
-    if (signupRequests.containsKey(email)) {
-      signupRequests.remove(email);
+    let key = email.toLower();
+    if (signupRequests.containsKey(key)) {
+      signupRequests.remove(key);
       true;
     } else { false };
   };
@@ -196,6 +198,7 @@ actor {
     campaign.id;
   };
 
+  // FIX: status = "" (empty), updatedAt = "" (empty) — never auto-fill
   public shared ({ caller }) func addAssignedCandidate(id : Text, name : Text, phone : Text, email : Text, skills : Text, assignedTo : Text, campaign : Text, batchId : Text, assignDate : Text) : async Bool {
     let candidate : AssignedCandidate = {
       id;
@@ -203,21 +206,23 @@ actor {
       phone;
       email;
       skills;
-      assignedTo;
+      assignedTo = assignedTo.toLower();
       campaign;
-      status = "Assigned";
+      status = "";       // FIXED: always empty on assign
       batchId;
       assignDate;
-      updatedAt = assignDate;
+      updatedAt = "";    // FIXED: empty until recruiter submits response
     };
     assignedCandidates.add(id, candidate);
     true;
   };
 
+  // FIX: exact email match (toLower comparison) instead of substring contains
   public query ({ caller }) func getAssignedCandidates(recruiterEmail : Text, campaign : Text) : async [AssignedCandidate] {
+    let emailLower = recruiterEmail.trim(#char(' ')).toLower();
     assignedCandidates.toArray().filter(
       func((cid, c)) {
-        c.assignedTo.toLower().contains(#text(recruiterEmail.trim(#char(' ')).toLower())) and
+        (emailLower == "" or c.assignedTo == emailLower) and
         (campaign == "" or c.campaign == campaign)
       }
     ).map(func((cid, c)) { c });
@@ -228,6 +233,7 @@ actor {
     array.sort();
   };
 
+  // FIX: update status + updatedAt only when recruiter explicitly acts
   public shared ({ caller }) func updateCandidateStatus(id : Text, status : Text, updatedAt : Text) : async Bool {
     switch (assignedCandidates.get(id)) {
       case (null) { false };

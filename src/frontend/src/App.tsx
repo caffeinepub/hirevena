@@ -1825,12 +1825,17 @@ function LoginPage({
               // Cache locally so future logins are faster
               const storedR = localStorage.getItem("crm_recruiters");
               const recs = storedR ? JSON.parse(storedR) : [];
-              if (
-                !recs.find(
-                  (r: any) =>
-                    r.email.toLowerCase() === match.email.toLowerCase(),
-                )
-              ) {
+              const existingIdx = recs.findIndex(
+                (r: any) => r.email.toLowerCase() === match.email.toLowerCase(),
+              );
+              if (existingIdx >= 0) {
+                recs[existingIdx] = {
+                  ...recs[existingIdx],
+                  status: "approved",
+                  name: match.name,
+                  password: match.password,
+                };
+              } else {
                 recs.push({
                   id: match.email.toLowerCase(),
                   name: match.name,
@@ -1842,8 +1847,8 @@ function LoginPage({
                   notInterested: 0,
                   followUps: 0,
                 });
-                localStorage.setItem("crm_recruiters", JSON.stringify(recs));
               }
+              localStorage.setItem("crm_recruiters", JSON.stringify(recs));
             }
           } catch {}
         }
@@ -1856,7 +1861,13 @@ function LoginPage({
           });
           onNavigate("recruiterDashboard");
         } else {
-          setError("Invalid credentials or account not yet approved.");
+          if (!actor) {
+            setError(
+              "Server is still connecting. Please wait a moment and try again.",
+            );
+          } else {
+            setError("Invalid credentials or account not yet approved.");
+          }
         }
       } else {
         setError("Invalid credentials. Please try again.");

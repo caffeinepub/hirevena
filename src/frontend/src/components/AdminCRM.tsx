@@ -91,7 +91,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function getStatusLabel(status: string): string {
-  if (!status || status === "New") return "Pending";
+  if (!status || status === "" || status === "New" || status === "Assigned")
+    return "Pending";
   return status;
 }
 
@@ -294,9 +295,9 @@ function DashboardSection() {
   const allCandidates =
     canisterCandidates.length > 0 ? canisterCandidates : candidates;
 
-  const todayLocale = new Date().toLocaleDateString("en-IN");
+  const todayISO = new Date().toISOString().split("T")[0];
   const callsToday = allCandidates.filter((c: any) =>
-    c.updatedAt?.startsWith(todayLocale),
+    c.updatedAt ? c.updatedAt.startsWith(todayISO) : false,
   ).length;
 
   const totalCalls = allCandidates.filter(
@@ -367,9 +368,9 @@ function DashboardSection() {
   });
   const lineData = days.map((day, i) => {
     const d = new Date(Date.now() - (6 - i) * 86400000);
-    const dateStr = d.toLocaleDateString("en-IN");
+    const dateStr = d.toISOString().split("T")[0];
     const dayCands = allCandidates.filter((c: any) =>
-      c.updatedAt?.startsWith(dateStr),
+      c.updatedAt ? c.updatedAt.startsWith(dateStr) : false,
     );
     return {
       day,

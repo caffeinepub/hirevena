@@ -166,7 +166,7 @@ const SEED_SIGNUP_REQUESTS: SignupRequest[] = [];
 const SEED_CAMPAIGNS: Campaign[] = [];
 
 // Bump version to clear old stale data (duplicate IDs from previous bug)
-const STORAGE_VERSION = "v8_fixedIds";
+const STORAGE_VERSION = "v9_isoTimestamps";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -390,16 +390,13 @@ export function useCRMState() {
         },
       ]),
     updateCandidate: (id, updates) => {
-      // Stamp updatedAt only when recruiter changes status (and caller didn't provide one)
+      // Stamp updatedAt only when recruiter submits Interested or Not Interested
       const isRecruiterResponse =
-        updates.status !== undefined &&
-        updates.status !== "New" &&
-        (updates.status as string) !== "";
+        updates.status === "Interested" || updates.status === "Not Interested";
       const finalUpdates: Partial<Candidate> = isRecruiterResponse
         ? {
             ...updates,
-            updatedAt:
-              (updates as any).updatedAt || new Date().toLocaleString("en-IN"),
+            updatedAt: (updates as any).updatedAt || new Date().toISOString(),
           }
         : updates;
 

@@ -72,7 +72,8 @@ const STATUSES = [
 const ACTIONS = ["Call", "WhatsApp", "Interview"];
 
 function getStatusLabel(status: string): string {
-  if (!status || status === "New" || status === "Assigned") return "Pending";
+  if (!status || status === "" || status === "New" || status === "Assigned")
+    return "Pending";
   return status;
 }
 
@@ -520,7 +521,7 @@ function CampaignDetailView({
 
   const handleSubmitResponse = () => {
     if (!responseCandidate) return;
-    const updatedAt = new Date().toLocaleString("en-IN");
+    const updatedAt = new Date().toISOString();
     // Optimistically update apiLeads immediately so UI reflects change
     setApiLeads((prev) =>
       prev.map((c) =>
@@ -556,6 +557,8 @@ function CampaignDetailView({
     });
     showToast(`✅ ${responseCandidate.name} marked as ${responseStatus}`);
     setResponseCandidate(null);
+    // Signal dashboard and activity to refresh immediately
+    window.dispatchEvent(new CustomEvent("crm:responseSubmitted"));
   };
 
   const today = new Date().toISOString().split("T")[0];
@@ -847,7 +850,11 @@ function RecruiterDashboardTab({
     };
     load();
     const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
   }, [actor, recruiterEmail]);
 
   const myCandidates =
@@ -855,9 +862,9 @@ function RecruiterDashboardTab({
       ? apiLeads
       : candidates.filter((c) => c.assignedRecruiter === recruiterId);
 
-  const todayFormatted = new Date().toLocaleDateString("en-IN");
+  const todayISO = new Date().toISOString().split("T")[0];
   const callsTodayCount = myCandidates.filter((c) =>
-    c.updatedAt?.startsWith(todayFormatted),
+    c.updatedAt ? c.updatedAt.startsWith(todayISO) : false,
   ).length;
   const interestedCount = myCandidates.filter(
     (c) => c.status === "Interested",
@@ -1445,7 +1452,11 @@ function ActivityTab({
     };
     load();
     const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
   }, [actorActivity, recruiterEmail]);
 
   const myCandidates = (
@@ -1463,13 +1474,13 @@ function ActivityTab({
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dateStr = d.toLocaleDateString("en-IN");
+    const dateStr = d.toISOString().split("T")[0];
     const dayLabel = d.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
     });
     const dayCands = myCandidates.filter((c) =>
-      c.updatedAt?.startsWith(dateStr),
+      c.updatedAt ? c.updatedAt.startsWith(dateStr) : false,
     );
     last7.push({
       date: dayLabel,
