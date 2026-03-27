@@ -10,6 +10,28 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AssignedCandidate {
+  'id' : string,
+  'status' : string,
+  'assignDate' : string,
+  'assignedTo' : string,
+  'campaign' : string,
+  'name' : string,
+  'email' : string,
+  'updatedAt' : string,
+  'batchId' : string,
+  'phone' : string,
+  'skills' : string,
+}
+export interface Campaign {
+  'id' : bigint,
+  'salary' : string,
+  'createdAt' : string,
+  'role' : string,
+  'companyName' : string,
+  'campaignName' : string,
+  'location' : string,
+}
 export interface SignupRequest {
   'status' : string,
   'password' : string,
@@ -33,17 +55,32 @@ export interface Submission {
 }
 export type Time = bigint;
 export interface _SERVICE {
+  'addAssignedCandidate' : ActorMethod<
+    [string, string, string, string, string, string, string, string, string],
+    boolean
+  >,
   'approveSignupRequest' : ActorMethod<[string], boolean>,
+  'createCampaign' : ActorMethod<
+    [string, string, string, string, string],
+    bigint
+  >,
   'createSubmission' : ActorMethod<
     [string, string, string, string, string, string, string],
     undefined
   >,
   'deleteSubmission' : ActorMethod<[bigint], boolean>,
+  'getAllAssignedCandidates' : ActorMethod<[], Array<AssignedCandidate>>,
   'getAllSubmissions' : ActorMethod<[], Array<Submission>>,
   'getApprovedRecruiters' : ActorMethod<[], Array<SignupRequest>>,
+  'getAssignedCandidates' : ActorMethod<
+    [string, string],
+    Array<AssignedCandidate>
+  >,
+  'getCampaigns' : ActorMethod<[], Array<Campaign>>,
   'getSignupRequests' : ActorMethod<[], Array<SignupRequest>>,
   'rejectSignupRequest' : ActorMethod<[string], boolean>,
   'submitSignupRequest' : ActorMethod<[string, string, string], undefined>,
+  'updateCandidateStatus' : ActorMethod<[string, string, string], boolean>,
   'updateLead' : ActorMethod<[bigint, string, string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;

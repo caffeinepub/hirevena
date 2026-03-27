@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 export type RecruiterStatus = "approved" | "pending" | "rejected";
 export type CandidateStatus =
   | "New"
+  | "Assigned"
   | "Called"
   | "Interested"
   | "Not Interested"

@@ -574,6 +574,7 @@ function DashboardSection() {
 // ── Recruiters ─────────────────────────────────────────────────────
 function RecruitersSection() {
   const store = useCRMStore();
+  const { actor } = useActor();
   const [showAdd, setShowAdd] = useState(false);
   const [showReassign, setShowReassign] = useState<string | null>(null);
   const [reassignTo, setReassignTo] = useState("");
@@ -583,6 +584,36 @@ function RecruitersSection() {
     password: "",
     status: "approved" as "approved" | "pending",
   });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    if (!actor) return;
+    actor
+      .getApprovedRecruiters()
+      .then((approved: any[]) => {
+        for (const r of approved) {
+          const existingRecruiter = store.recruiters.find(
+            (sr: any) => sr.email.toLowerCase() === r.email.toLowerCase(),
+          );
+          if (!existingRecruiter) {
+            store.addSignupRequest({
+              name: r.name,
+              email: r.email,
+              password: r.password || "",
+            });
+            setTimeout(() => {
+              const req = store.signupRequests.find(
+                (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
+              );
+              if (req) store.approveRecruiter(req.id);
+            }, 50);
+          } else if (existingRecruiter.status !== "approved") {
+            store.approveRecruiter(existingRecruiter.id);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [actor]);
 
   const approvedRecruiters = store.recruiters.filter(
     (r) => r.status === "approved" || r.status === "pending",
@@ -616,6 +647,8 @@ function RecruitersSection() {
                     data-ocid="admin.approve.button"
                     onClick={() => {
                       store.approveRecruiter(req.id);
+                      if (actor)
+                        actor.approveSignupRequest(req.email).catch(() => {});
                       apiPost({
                         type: "approveRecruiter",
                         email: req.email,

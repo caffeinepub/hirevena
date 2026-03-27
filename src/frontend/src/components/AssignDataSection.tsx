@@ -157,9 +157,11 @@ const EMPTY_CAMPAIGN_FORM = {
   salary: "",
 };
 
+import { useActor } from "../hooks/useActor";
 import { apiPost, getApiUrl } from "../utils/apiService";
 export default function AssignDataSection() {
   const store = useCRMStore();
+  const { actor } = useActor();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<"campaigns" | "tracking">("campaigns");
 
@@ -194,6 +196,66 @@ export default function AssignDataSection() {
     return () => clearInterval(t);
   }, []);
   void tick;
+
+  // Load campaigns from canister (shared across all devices)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: store is a zustand store; methods are stable
+  useEffect(() => {
+    const loadCanisterCampaigns = async () => {
+      if (!actor) return;
+      try {
+        const canisterCampaigns = await actor.getCampaigns();
+        if (canisterCampaigns && canisterCampaigns.length > 0) {
+          const currentNames = store.campaigns.map((sc) => sc.campaignName);
+          for (const cc of canisterCampaigns) {
+            if (!currentNames.includes(cc.campaignName)) {
+              store.addCampaign({
+                campaignName: cc.campaignName,
+                companyName: cc.companyName,
+                role: cc.role,
+                location: cc.location,
+                salary: cc.salary,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Canister getCampaigns error:", e);
+      }
+    };
+    loadCanisterCampaigns();
+    const t = setInterval(loadCanisterCampaigns, 10000);
+    return () => clearInterval(t);
+  }, [actor]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    if (!actor) return;
+    actor
+      .getApprovedRecruiters()
+      .then((approved: any[]) => {
+        for (const r of approved) {
+          const existingRecruiter = store.recruiters.find(
+            (sr: any) => sr.email.toLowerCase() === r.email.toLowerCase(),
+          );
+          if (!existingRecruiter) {
+            store.addSignupRequest({
+              name: r.name,
+              email: r.email,
+              password: r.password || "",
+            });
+            setTimeout(() => {
+              const req = store.signupRequests.find(
+                (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
+              );
+              if (req) store.approveRecruiter(req.id);
+            }, 50);
+          } else if (existingRecruiter.status !== "approved") {
+            store.approveRecruiter(existingRecruiter.id);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [actor]);
 
   const approvedRecruiters = store.recruiters.filter(
     (r) => r.status === "approved",
@@ -336,6 +398,18 @@ export default function AssignDataSection() {
         salary: campaignForm.salary.trim(),
       }).catch(console.error);
     }
+    // Also save to ICP canister for cross-device sync
+    if (actor) {
+      actor
+        .createCampaign(
+          campaignForm.campaignName.trim(),
+          campaignForm.companyName.trim(),
+          campaignForm.role.trim(),
+          campaignForm.location.trim(),
+          campaignForm.salary.trim(),
+        )
+        .catch(console.error);
+    }
     setShowCampaignModal(false);
     setCampaignForm(EMPTY_CAMPAIGN_FORM);
     setCampaignFormError("");
@@ -396,10 +470,11 @@ export default function AssignDataSection() {
       details: `${batchId}: ${selected.length} candidates → ${approvedRecruiters.find((r) => r.id === selectedRecruiter)?.name} [${selectedCampaign}]`,
     });
 
+    const recruiterEmailForAssign =
+      approvedRecruiters.find((r) => r.id === selectedRecruiter)?.email ||
+      selectedRecruiter;
+
     if (getApiUrl()) {
-      const recruiterEmail =
-        approvedRecruiters.find((r) => r.id === selectedRecruiter)?.email ||
-        selectedRecruiter;
       for (const row of candidatesToAdd) {
         apiPost({
           type: "addCandidate",
@@ -407,12 +482,33 @@ export default function AssignDataSection() {
           phone: row.phone,
           email: row.email || "",
           skills: row.skills || "",
-          assignedTo: recruiterEmail,
+          assignedTo: recruiterEmailForAssign,
           campaign: selectedCampaign,
           status: "",
           batchId,
           assignDate,
         }).catch(console.error);
+      }
+    }
+
+    // Save to ICP canister for cross-device sync
+    if (actor) {
+      let idxOffset = 0;
+      for (const row of candidatesToAdd) {
+        const candidateId = addedIds[idxOffset++] || crypto.randomUUID();
+        actor
+          .addAssignedCandidate(
+            candidateId,
+            row.name,
+            row.phone,
+            row.email || "",
+            row.skills || "",
+            recruiterEmailForAssign.toLowerCase(),
+            selectedCampaign,
+            batchId,
+            assignDate,
+          )
+          .catch(console.error);
       }
     }
 

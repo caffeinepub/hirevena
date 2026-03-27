@@ -1832,7 +1832,7 @@ function LoginPage({
                 )
               ) {
                 recs.push({
-                  id: `R_${Date.now()}`,
+                  id: match.email.toLowerCase(),
                   name: match.name,
                   email: match.email,
                   password: match.password,
@@ -1850,7 +1850,7 @@ function LoginPage({
         if (found) {
           onLoginSuccess({
             role: "recruiter",
-            id: found.id,
+            id: found.email?.toLowerCase() || found.id,
             name: found.name,
             email: found.email,
           });

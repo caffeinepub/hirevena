@@ -8,6 +8,19 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const AssignedCandidate = IDL.Record({
+  'id' : IDL.Text,
+  'status' : IDL.Text,
+  'assignDate' : IDL.Text,
+  'assignedTo' : IDL.Text,
+  'campaign' : IDL.Text,
+  'name' : IDL.Text,
+  'email' : IDL.Text,
+  'updatedAt' : IDL.Text,
+  'batchId' : IDL.Text,
+  'phone' : IDL.Text,
+  'skills' : IDL.Text,
+});
 export const Time = IDL.Int;
 export const Submission = IDL.Record({
   'id' : IDL.Nat,
@@ -30,20 +43,65 @@ export const SignupRequest = IDL.Record({
   'email' : IDL.Text,
   'requestedAt' : Time,
 });
+export const Campaign = IDL.Record({
+  'id' : IDL.Nat,
+  'salary' : IDL.Text,
+  'createdAt' : IDL.Text,
+  'role' : IDL.Text,
+  'companyName' : IDL.Text,
+  'campaignName' : IDL.Text,
+  'location' : IDL.Text,
+});
 
 export const idlService = IDL.Service({
+  'addAssignedCandidate' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [IDL.Bool],
+      [],
+    ),
   'approveSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
+  'createCampaign' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Nat],
+      [],
+    ),
   'createSubmission' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
       [],
     ),
   'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'getAllAssignedCandidates' : IDL.Func(
+      [],
+      [IDL.Vec(AssignedCandidate)],
+      ['query'],
+    ),
   'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
   'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+  'getAssignedCandidates' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Vec(AssignedCandidate)],
+      ['query'],
+    ),
+  'getCampaigns' : IDL.Func([], [IDL.Vec(Campaign)], ['query']),
   'getSignupRequests' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
   'rejectSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'submitSignupRequest' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+  'updateCandidateStatus' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Bool],
+      [],
+    ),
   'updateLead' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
       [IDL.Bool],
@@ -54,6 +112,19 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const AssignedCandidate = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'assignDate' : IDL.Text,
+    'assignedTo' : IDL.Text,
+    'campaign' : IDL.Text,
+    'name' : IDL.Text,
+    'email' : IDL.Text,
+    'updatedAt' : IDL.Text,
+    'batchId' : IDL.Text,
+    'phone' : IDL.Text,
+    'skills' : IDL.Text,
+  });
   const Time = IDL.Int;
   const Submission = IDL.Record({
     'id' : IDL.Nat,
@@ -76,20 +147,65 @@ export const idlFactory = ({ IDL }) => {
     'email' : IDL.Text,
     'requestedAt' : Time,
   });
+  const Campaign = IDL.Record({
+    'id' : IDL.Nat,
+    'salary' : IDL.Text,
+    'createdAt' : IDL.Text,
+    'role' : IDL.Text,
+    'companyName' : IDL.Text,
+    'campaignName' : IDL.Text,
+    'location' : IDL.Text,
+  });
   
   return IDL.Service({
+    'addAssignedCandidate' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Bool],
+        [],
+      ),
     'approveSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
+    'createCampaign' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Nat],
+        [],
+      ),
     'createSubmission' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
         [],
       ),
     'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'getAllAssignedCandidates' : IDL.Func(
+        [],
+        [IDL.Vec(AssignedCandidate)],
+        ['query'],
+      ),
     'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
     'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
+    'getAssignedCandidates' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(AssignedCandidate)],
+        ['query'],
+      ),
+    'getCampaigns' : IDL.Func([], [IDL.Vec(Campaign)], ['query']),
     'getSignupRequests' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
     'rejectSignupRequest' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'submitSignupRequest' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
+    'updateCandidateStatus' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
     'updateLead' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Bool],

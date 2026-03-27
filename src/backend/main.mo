@@ -1,11 +1,12 @@
 import Time "mo:core/Time";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
-import Array "mo:core/Array";
 import Order "mo:core/Order";
-import Migration "migration";
+import Text "mo:core/Text";
+import Array "mo:core/Array";
 
-(with migration = Migration.run)
+
+
 actor {
   type Submission = {
     id : Nat;
@@ -42,11 +43,49 @@ actor {
     };
   };
 
-  let submissions = Map.empty<Nat, Submission>();
-  var nextId = 0;
-  let signupRequests = Map.empty<Text, SignupRequest>();
+  type Campaign = {
+    id : Nat;
+    campaignName : Text;
+    companyName : Text;
+    role : Text;
+    location : Text;
+    salary : Text;
+    createdAt : Text;
+  };
 
-  // HireCandidate: (new) Recruiter Signup
+  module Campaign {
+    public func compare(a : Campaign, b : Campaign) : Order.Order {
+      Nat.compare(a.id, b.id);
+    };
+  };
+
+  type AssignedCandidate = {
+    id : Text;
+    name : Text;
+    phone : Text;
+    email : Text;
+    skills : Text;
+    assignedTo : Text;
+    campaign : Text;
+    status : Text;
+    batchId : Text;
+    assignDate : Text;
+    updatedAt : Text;
+  };
+
+  module AssignedCandidate {
+    public func compare(a : AssignedCandidate, b : AssignedCandidate) : Order.Order {
+      a.id.compare(b.id);
+    };
+  };
+
+  let submissions = Map.empty<Nat, Submission>();
+  let signupRequests = Map.empty<Text, SignupRequest>();
+  var nextId = 0;
+  var nextCampaignId = 1;
+  let campaigns = Map.empty<Nat, Campaign>();
+  let assignedCandidates = Map.empty<Text, AssignedCandidate>();
+
   public shared ({ caller }) func submitSignupRequest(name : Text, email : Text, password : Text) : async () {
     let newRequest : SignupRequest = {
       name;
@@ -75,7 +114,6 @@ actor {
   };
 
   public shared ({ caller }) func rejectSignupRequest(email : Text) : async Bool {
-    // Remove the SignupRequest (delete)
     if (signupRequests.containsKey(email)) {
       signupRequests.remove(email);
       true;
@@ -83,14 +121,9 @@ actor {
   };
 
   public query ({ caller }) func getApprovedRecruiters() : async [SignupRequest] {
-    let allRequests = signupRequests.toArray();
-    let filtered = allRequests.filter(
-      func((email, r)) { r.status == "approved" }
-    );
-    filtered.map(func((email, r)) { r });
+    signupRequests.toArray().filter(func((email, r)) { r.status == "approved" }).map(func((email, r)) { r });
   };
 
-  // HireCandidate: (original) Submissions
   public shared ({ caller }) func createSubmission(
     companyName : Text,
     contactName : Text,
@@ -145,6 +178,73 @@ actor {
 
   public query ({ caller }) func getAllSubmissions() : async [Submission] {
     let array = submissions.values().toArray();
+    array.sort();
+  };
+
+  public shared ({ caller }) func createCampaign(campaignName : Text, companyName : Text, role : Text, location : Text, salary : Text) : async Nat {
+    let campaign : Campaign = {
+      id = nextCampaignId;
+      campaignName;
+      companyName;
+      role;
+      location;
+      salary;
+      createdAt = Time.now().toText();
+    };
+    campaigns.add(nextCampaignId, campaign);
+    nextCampaignId += 1;
+    campaign.id;
+  };
+
+  public shared ({ caller }) func addAssignedCandidate(id : Text, name : Text, phone : Text, email : Text, skills : Text, assignedTo : Text, campaign : Text, batchId : Text, assignDate : Text) : async Bool {
+    let candidate : AssignedCandidate = {
+      id;
+      name;
+      phone;
+      email;
+      skills;
+      assignedTo;
+      campaign;
+      status = "Assigned";
+      batchId;
+      assignDate;
+      updatedAt = assignDate;
+    };
+    assignedCandidates.add(id, candidate);
+    true;
+  };
+
+  public query ({ caller }) func getAssignedCandidates(recruiterEmail : Text, campaign : Text) : async [AssignedCandidate] {
+    assignedCandidates.toArray().filter(
+      func((cid, c)) {
+        c.assignedTo.toLower().contains(#text(recruiterEmail.trim(#char(' ')).toLower())) and
+        (campaign == "" or c.campaign == campaign)
+      }
+    ).map(func((cid, c)) { c });
+  };
+
+  public query ({ caller }) func getAllAssignedCandidates() : async [AssignedCandidate] {
+    let array = assignedCandidates.values().toArray();
+    array.sort();
+  };
+
+  public shared ({ caller }) func updateCandidateStatus(id : Text, status : Text, updatedAt : Text) : async Bool {
+    switch (assignedCandidates.get(id)) {
+      case (null) { false };
+      case (?oldCandidate) {
+        let updatedCandidate = {
+          oldCandidate with
+          status;
+          updatedAt;
+        };
+        assignedCandidates.add(id, updatedCandidate);
+        true;
+      };
+    };
+  };
+
+  public query ({ caller }) func getCampaigns() : async [Campaign] {
+    let array = campaigns.values().toArray();
     array.sort();
   };
 };

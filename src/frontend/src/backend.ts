@@ -104,6 +104,28 @@ export interface Submission {
     positions: string;
     followUpDate: string;
 }
+export interface AssignedCandidate {
+    id: string;
+    status: string;
+    assignDate: string;
+    assignedTo: string;
+    campaign: string;
+    name: string;
+    email: string;
+    updatedAt: string;
+    batchId: string;
+    phone: string;
+    skills: string;
+}
+export interface Campaign {
+    id: bigint;
+    salary: string;
+    createdAt: string;
+    role: string;
+    companyName: string;
+    campaignName: string;
+    location: string;
+}
 export interface SignupRequest {
     status: string;
     password: string;
@@ -112,18 +134,38 @@ export interface SignupRequest {
     requestedAt: Time;
 }
 export interface backendInterface {
+    addAssignedCandidate(id: string, name: string, phone: string, email: string, skills: string, assignedTo: string, campaign: string, batchId: string, assignDate: string): Promise<boolean>;
     approveSignupRequest(email: string): Promise<boolean>;
+    createCampaign(campaignName: string, companyName: string, role: string, location: string, salary: string): Promise<bigint>;
     createSubmission(companyName: string, contactName: string, phoneNumber: string, emailAddress: string, role: string, positions: string, urgency: string): Promise<void>;
     deleteSubmission(id: bigint): Promise<boolean>;
+    getAllAssignedCandidates(): Promise<Array<AssignedCandidate>>;
     getAllSubmissions(): Promise<Array<Submission>>;
     getApprovedRecruiters(): Promise<Array<SignupRequest>>;
+    getAssignedCandidates(recruiterEmail: string, campaign: string): Promise<Array<AssignedCandidate>>;
+    getCampaigns(): Promise<Array<Campaign>>;
     getSignupRequests(): Promise<Array<SignupRequest>>;
     rejectSignupRequest(email: string): Promise<boolean>;
     submitSignupRequest(name: string, email: string, password: string): Promise<void>;
+    updateCandidateStatus(id: string, status: string, updatedAt: string): Promise<boolean>;
     updateLead(id: bigint, status: string, notes: string, followUpDate: string): Promise<boolean>;
 }
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async addAssignedCandidate(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string, arg8: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addAssignedCandidate(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addAssignedCandidate(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+            return result;
+        }
+    }
     async approveSignupRequest(arg0: string): Promise<boolean> {
         if (this.processError) {
             try {
@@ -135,6 +177,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.approveSignupRequest(arg0);
+            return result;
+        }
+    }
+    async createCampaign(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createCampaign(arg0, arg1, arg2, arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createCampaign(arg0, arg1, arg2, arg3, arg4);
             return result;
         }
     }
@@ -166,6 +222,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getAllAssignedCandidates(): Promise<Array<AssignedCandidate>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllAssignedCandidates();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllAssignedCandidates();
+            return result;
+        }
+    }
     async getAllSubmissions(): Promise<Array<Submission>> {
         if (this.processError) {
             try {
@@ -191,6 +261,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getApprovedRecruiters();
+            return result;
+        }
+    }
+    async getAssignedCandidates(arg0: string, arg1: string): Promise<Array<AssignedCandidate>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAssignedCandidates(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAssignedCandidates(arg0, arg1);
+            return result;
+        }
+    }
+    async getCampaigns(): Promise<Array<Campaign>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCampaigns();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCampaigns();
             return result;
         }
     }
@@ -233,6 +331,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.submitSignupRequest(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async updateCandidateStatus(arg0: string, arg1: string, arg2: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateCandidateStatus(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateCandidateStatus(arg0, arg1, arg2);
             return result;
         }
     }

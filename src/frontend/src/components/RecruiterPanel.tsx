@@ -31,6 +31,7 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useActor } from "../hooks/useActor";
 import {
   type Campaign,
   type Candidate,
@@ -70,7 +71,7 @@ const STATUSES = [
 const ACTIONS = ["Call", "WhatsApp", "Interview"];
 
 function getStatusLabel(status: string): string {
-  if (!status || status === "New") return "Pending";
+  if (!status || status === "New" || status === "Assigned") return "Pending";
   return status;
 }
 
@@ -218,11 +219,46 @@ function CampaignListView({
   >([]);
   const [apiCampaigns, setApiCampaigns] = useState<Campaign[]>([]);
 
+  const { actor } = useActor();
+
   useEffect(() => {
-    const loadFromApi = async () => {
-      if (!recruiterEmail || !getApiUrl()) return;
-      const userEmail = recruiterEmail.toLowerCase();
-      console.log("Logged user:", userEmail);
+    const load = async () => {
+      const userEmail = (recruiterEmail || "").toLowerCase();
+      if (!userEmail) return;
+
+      // Primary: ICP canister (works cross-device, no config needed)
+      if (actor) {
+        try {
+          const [canisterCandidates, canisterCampaigns] = await Promise.all([
+            actor.getAssignedCandidates(userEmail, ""),
+            actor.getCampaigns(),
+          ]);
+          console.log("Logged user:", userEmail);
+          console.log("Fetched data (canister):", canisterCandidates);
+          if (canisterCandidates && canisterCandidates.length > 0) {
+            setApiCandidates(canisterCandidates as any);
+          }
+          if (canisterCampaigns && canisterCampaigns.length > 0) {
+            setApiCampaigns(
+              canisterCampaigns.map((c) => ({
+                id: String(c.id),
+                campaignName: c.campaignName,
+                companyName: c.companyName,
+                role: c.role,
+                location: c.location,
+                salary: c.salary,
+                createdAt: c.createdAt,
+              })),
+            );
+          }
+          return; // canister data loaded, skip API fallback
+        } catch (e) {
+          console.error("Canister fetch error:", e);
+        }
+      }
+
+      // Fallback: Google Apps Script API
+      if (!getApiUrl()) return;
       try {
         const [leadsData, campaignsData] = await Promise.all([
           apiFetch({ type: "leads", recruiter: userEmail }),
@@ -230,17 +266,17 @@ function CampaignListView({
         ]);
         const leads = (leadsData as any)?.data || leadsData || [];
         const campaigns = (campaignsData as any)?.data || campaignsData || [];
-        console.log("Fetched data:", leads);
+        console.log("Fetched data (API):", leads);
         setApiCandidates(Array.isArray(leads) ? leads : []);
         setApiCampaigns(Array.isArray(campaigns) ? campaigns : []);
       } catch (e) {
         console.error("API fetch error:", e);
       }
     };
-    loadFromApi();
-    const interval = setInterval(loadFromApi, 5000);
+    load();
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [recruiterEmail]);
+  }, [actor, recruiterEmail]);
 
   const myCandidates =
     apiCandidates.length > 0
@@ -271,7 +307,12 @@ function CampaignListView({
   const myCampaigns = myCampaignNames.map((name) => {
     const campaignObj = allCampaigns.find((c) => c.campaignName === name);
     const leads = myCandidates.filter((c) => c.campaign === name);
-    const pending = leads.filter((c) => !c.status || c.status === "New").length;
+    const pending = leads.filter(
+      (c) =>
+        !c.status ||
+        (c.status as string) === "New" ||
+        (c.status as string) === "Assigned",
+    ).length;
     const interested = leads.filter((c) => c.status === "Interested").length;
     return {
       campaign:
@@ -410,6 +451,7 @@ function CampaignDetailView({
   onBack: () => void;
 }) {
   const store = useCRMStore();
+  const { actor } = useActor();
   const [responseCandidate, setResponseCandidate] = useState<Candidate | null>(
     null,
   );
@@ -421,16 +463,37 @@ function CampaignDetailView({
 
   useEffect(() => {
     const load = async () => {
-      if (!recruiterEmail || !getApiUrl()) return;
+      const userEmail = (recruiterEmail || "").toLowerCase();
+      if (!userEmail) return;
+
+      // Primary: ICP canister
+      if (actor) {
+        try {
+          const canisterLeads = await actor.getAssignedCandidates(
+            userEmail,
+            campaign.campaignName,
+          );
+          if (canisterLeads && canisterLeads.length > 0) {
+            console.log("Fetched data (canister):", canisterLeads);
+            setApiLeads(canisterLeads as any);
+            return;
+          }
+        } catch (e) {
+          console.error("Canister detail fetch error:", e);
+        }
+      }
+
+      // Fallback: Google Apps Script API
+      if (!getApiUrl()) return;
       try {
         const data = await apiFetch({
           type: "leads",
-          recruiter: recruiterEmail.toLowerCase(),
+          recruiter: userEmail,
           campaign: campaign.campaignName,
         });
         const fetchedLeads = (data as any)?.data || data || [];
         if (Array.isArray(fetchedLeads)) setApiLeads(fetchedLeads);
-        console.log("Fetched data:", fetchedLeads);
+        console.log("Fetched data (API):", fetchedLeads);
       } catch (e) {
         console.error(e);
       }
@@ -438,7 +501,7 @@ function CampaignDetailView({
     load();
     const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
-  }, [recruiterEmail, campaign.campaignName]);
+  }, [actor, recruiterEmail, campaign.campaignName]);
 
   const leads =
     apiLeads.length > 0
@@ -456,13 +519,20 @@ function CampaignDetailView({
 
   const handleSubmitResponse = () => {
     if (!responseCandidate) return;
+    const updatedAt = new Date().toISOString();
     if (getApiUrl()) {
       apiPost({
         type: "updateCandidate",
         id: responseCandidate.id,
         status: responseStatus,
-        updatedAt: new Date().toISOString(),
+        updatedAt,
       }).catch(console.error);
+    }
+    // Sync to ICP canister for cross-device visibility
+    if (actor) {
+      actor
+        .updateCandidateStatus(responseCandidate.id, responseStatus, updatedAt)
+        .catch(console.error);
     }
     store.updateCandidate(responseCandidate.id, { status: responseStatus });
     store.addActivityLog({
@@ -479,7 +549,12 @@ function CampaignDetailView({
   const today = new Date().toISOString().split("T")[0];
 
   const totalLeads = leads.length;
-  const pending = leads.filter((c) => !c.status || c.status === "New").length;
+  const pending = leads.filter(
+    (c) =>
+      !c.status ||
+      (c.status as string) === "New" ||
+      (c.status as string) === "Assigned",
+  ).length;
   const interested = leads.filter((c) => c.status === "Interested").length;
   const notInterested = leads.filter(
     (c) => c.status === "Not Interested",
@@ -565,7 +640,9 @@ function CampaignDetailView({
             const finalized = isStatusFinalized(c.status);
             const isFollowUpToday = c.followUpDate === today;
             const borderClass =
-              !c.status || c.status === "New"
+              !c.status ||
+              (c.status as string) === "New" ||
+              (c.status as string) === "Assigned"
                 ? "border-l-4 border-l-red-400"
                 : isFollowUpToday
                   ? "border-l-4 border-l-yellow-400"
