@@ -35,6 +35,7 @@ import { useActor } from "../hooks/useActor";
 import {
   type Campaign,
   type Candidate,
+  type CandidateStatus,
   type CurrentUser,
   useCRMStore,
 } from "../hooks/useCRMStore";
@@ -519,7 +520,15 @@ function CampaignDetailView({
 
   const handleSubmitResponse = () => {
     if (!responseCandidate) return;
-    const updatedAt = new Date().toISOString();
+    const updatedAt = new Date().toLocaleString("en-IN");
+    // Optimistically update apiLeads immediately so UI reflects change
+    setApiLeads((prev) =>
+      prev.map((c) =>
+        c.id === responseCandidate.id
+          ? { ...c, status: responseStatus as CandidateStatus, updatedAt }
+          : c,
+      ),
+    );
     if (getApiUrl()) {
       apiPost({
         type: "updateCandidate",
@@ -534,7 +543,10 @@ function CampaignDetailView({
         .updateCandidateStatus(responseCandidate.id, responseStatus, updatedAt)
         .catch(console.error);
     }
-    store.updateCandidate(responseCandidate.id, { status: responseStatus });
+    store.updateCandidate(responseCandidate.id, {
+      status: responseStatus as CandidateStatus,
+      updatedAt,
+    });
     store.addActivityLog({
       recruiterId,
       recruiterName:
@@ -797,8 +809,28 @@ function RecruiterDashboardTab({
     import("../hooks/useCRMStore").Candidate[]
   >([]);
 
+  const { actor } = useActor();
+
   useEffect(() => {
     const load = async () => {
+      // Primary: ICP canister
+      if (actor) {
+        try {
+          const canisterLeads = await actor.getAssignedCandidates(
+            (recruiterEmail || "").toLowerCase(),
+            "",
+          );
+          if (canisterLeads && canisterLeads.length > 0) {
+            setApiLeads(canisterLeads as any);
+            console.log("Logged user:", recruiterEmail);
+            console.log("Fetched data:", canisterLeads);
+            return;
+          }
+        } catch (e) {
+          console.error("Canister dashboard fetch error:", e);
+        }
+      }
+      // Fallback: Google Apps Script API
       if (!recruiterEmail || !getApiUrl()) return;
       try {
         const data = await apiFetch({
@@ -816,7 +848,7 @@ function RecruiterDashboardTab({
     load();
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [recruiterEmail]);
+  }, [actor, recruiterEmail]);
 
   const myCandidates =
     apiLeads.length > 0
@@ -839,21 +871,9 @@ function RecruiterDashboardTab({
 
   const stats = [
     { label: "Calls Today", value: callsTodayCount },
-    {
-      label: "Interested",
-      value: apiLeads.length > 0 ? interestedCount : recruiter?.interested || 0,
-    },
-    {
-      label: "Not Interested",
-      value:
-        apiLeads.length > 0
-          ? notInterestedCount
-          : recruiter?.notInterested || 0,
-    },
-    {
-      label: "Follow-ups",
-      value: apiLeads.length > 0 ? followUpsCount : recruiter?.followUps || 0,
-    },
+    { label: "Interested", value: interestedCount },
+    { label: "Not Interested", value: notInterestedCount },
+    { label: "Follow-ups", value: followUpsCount },
   ];
 
   return (
@@ -1385,14 +1405,32 @@ function ActivityTab({
   recruiterEmail,
 }: { recruiterId: string; recruiterEmail?: string }) {
   const { recruiters, candidates, activityLogs } = useCRMStore();
-  const recruiter = recruiters.find((r) => r.id === recruiterId);
+  const _recruiter = recruiters.find((r) => r.id === recruiterId);
   const myLogs = activityLogs.filter((l) => l.recruiterId === recruiterId);
   const [apiLeads, setApiLeads] = useState<
     import("../hooks/useCRMStore").Candidate[]
   >([]);
 
+  const { actor: actorActivity } = useActor();
+
   useEffect(() => {
     const load = async () => {
+      // Primary: ICP canister
+      if (actorActivity) {
+        try {
+          const canisterLeads = await actorActivity.getAssignedCandidates(
+            (recruiterEmail || "").toLowerCase(),
+            "",
+          );
+          if (canisterLeads && canisterLeads.length > 0) {
+            setApiLeads(canisterLeads as any);
+            return;
+          }
+        } catch (e) {
+          console.error("Canister activity fetch error:", e);
+        }
+      }
+      // Fallback: Google Apps Script API
       if (!recruiterEmail || !getApiUrl()) return;
       try {
         const data = await apiFetch({
@@ -1408,7 +1446,7 @@ function ActivityTab({
     load();
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [recruiterEmail]);
+  }, [actorActivity, recruiterEmail]);
 
   const myCandidates = (
     apiLeads.length > 0
@@ -1442,15 +1480,33 @@ function ActivityTab({
     });
   }
 
+  const allMyCandidates =
+    apiLeads.length > 0
+      ? apiLeads
+      : candidates.filter((c) => c.assignedRecruiter === recruiterId);
+  const totalResponses = allMyCandidates.filter(
+    (c) => c.status === "Interested" || c.status === "Not Interested",
+  ).length;
+  const interestedCnt = allMyCandidates.filter(
+    (c) => c.status === "Interested",
+  ).length;
+  const notInterestedCnt = allMyCandidates.filter(
+    (c) => c.status === "Not Interested",
+  ).length;
   const convRate =
-    recruiter && recruiter.calls > 0
-      ? Math.round((recruiter.interested / recruiter.calls) * 100)
-      : 0;
+    totalResponses > 0 ? Math.round((interestedCnt / totalResponses) * 100) : 0;
+  const totalResponsesCnt = allMyCandidates.filter(
+    (c) =>
+      !!c.updatedAt &&
+      (c.status as string) !== "" &&
+      c.status !== "New" &&
+      (c.status as string) !== "Assigned",
+  ).length;
 
   const stats = [
-    { label: "Total Responses", value: recruiter?.calls || 0 },
-    { label: "Interested", value: recruiter?.interested || 0 },
-    { label: "Not Interested", value: recruiter?.notInterested || 0 },
+    { label: "Total Responses", value: totalResponsesCnt },
+    { label: "Interested", value: interestedCnt },
+    { label: "Not Interested", value: notInterestedCnt },
     { label: "Conversion %", value: `${convRate}%` },
   ];
 

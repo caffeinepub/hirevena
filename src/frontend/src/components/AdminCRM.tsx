@@ -271,37 +271,83 @@ export default function AdminCRM({ onLogout }: { onLogout: () => void }) {
 // ── Dashboard ──────────────────────────────────────────────────────
 function DashboardSection() {
   const { recruiters, candidates, campaigns } = useCRMStore();
+  const { actor } = useActor();
+  const [canisterCandidates, setCanisterCandidates] = useState<any[]>([]);
   const today = new Date().toISOString().split("T")[0];
 
-  const approvedRecruiters = recruiters.filter((r) => r.status === "approved");
-  const totalCalls = approvedRecruiters.reduce((s, r) => s + r.calls, 0);
-  const totalInterested = approvedRecruiters.reduce(
-    (s, r) => s + r.interested,
-    0,
-  );
-  const totalNotInterested = approvedRecruiters.reduce(
-    (s, r) => s + r.notInterested,
-    0,
-  );
-  const _totalFollowUps = approvedRecruiters.reduce(
-    (s, r) => s + r.followUps,
-    0,
-  );
+  useEffect(() => {
+    const load = async () => {
+      if (!actor) return;
+      try {
+        const all = await actor.getAllAssignedCandidates();
+        if (all && all.length > 0) setCanisterCandidates(all as any[]);
+      } catch (e) {
+        console.error("Admin dashboard canister fetch error:", e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [actor]);
+
+  // Use canisterCandidates if available, else fall back to store.candidates
+  const allCandidates =
+    canisterCandidates.length > 0 ? canisterCandidates : candidates;
+
+  const todayLocale = new Date().toLocaleDateString("en-IN");
+  const callsToday = allCandidates.filter((c: any) =>
+    c.updatedAt?.startsWith(todayLocale),
+  ).length;
+
+  const totalCalls = allCandidates.filter(
+    (c: any) =>
+      !!c.updatedAt &&
+      c.status !== "" &&
+      c.status !== "Assigned" &&
+      c.status !== "New",
+  ).length;
+  const totalInterested = allCandidates.filter(
+    (c: any) => c.status === "Interested",
+  ).length;
+  const totalNotInterested = allCandidates.filter(
+    (c: any) => c.status === "Not Interested",
+  ).length;
+
   const convRate =
     totalCalls > 0 ? Math.round((totalInterested / totalCalls) * 100) : 0;
   const perfScore = totalInterested * 2 + totalCalls;
 
-  const todayFollowUps = candidates.filter(
-    (c) => c.followUpDate === today,
+  const todayFollowUps = allCandidates.filter(
+    (c: any) => c.followUpDate === today,
   ).length;
-  const overdueFollowUps = candidates.filter(
-    (c) => c.followUpDate && c.followUpDate < today,
+  const overdueFollowUps = allCandidates.filter(
+    (c: any) => c.followUpDate && c.followUpDate < today,
   ).length;
 
-  const todayLocale = new Date().toLocaleDateString("en-IN");
-  const callsToday = candidates.filter((c) =>
-    c.updatedAt?.startsWith(todayLocale),
-  ).length;
+  // Compute per-recruiter stats from allCandidates
+  const approvedRecruiters = recruiters
+    .filter((r) => r.status === "approved")
+    .map((r) => {
+      const rCands = allCandidates.filter(
+        (c: any) =>
+          c.assignedTo?.toLowerCase() === r.email?.toLowerCase() ||
+          c.assignedRecruiter === r.id,
+      );
+      return {
+        ...r,
+        calls: rCands.filter(
+          (c: any) =>
+            !!c.updatedAt &&
+            c.status !== "" &&
+            c.status !== "Assigned" &&
+            c.status !== "New",
+        ).length,
+        interested: rCands.filter((c: any) => c.status === "Interested").length,
+        notInterested: rCands.filter((c: any) => c.status === "Not Interested")
+          .length,
+        followUps: rCands.filter((c: any) => c.status === "Follow-up").length,
+      };
+    });
 
   // blue: oklch(0.55 0.17 245)
 
@@ -319,11 +365,18 @@ function DashboardSection() {
     const d = new Date(Date.now() - (6 - i) * 86400000);
     return d.toLocaleDateString("en-IN", { weekday: "short" });
   });
-  const lineData = days.map((day, i) => ({
-    day,
-    Calls: [12, 18, 15, 22, 19, 25, callsToday || 10][i],
-    Interested: [5, 8, 6, 10, 9, 12, 5][i],
-  }));
+  const lineData = days.map((day, i) => {
+    const d = new Date(Date.now() - (6 - i) * 86400000);
+    const dateStr = d.toLocaleDateString("en-IN");
+    const dayCands = allCandidates.filter((c: any) =>
+      c.updatedAt?.startsWith(dateStr),
+    );
+    return {
+      day,
+      Calls: dayCands.length,
+      Interested: dayCands.filter((c: any) => c.status === "Interested").length,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -517,18 +570,21 @@ function DashboardSection() {
               </thead>
               <tbody>
                 {campaigns.map((camp: Campaign, i: number) => {
-                  const campCandidates = candidates.filter(
-                    (c) => c.campaign === camp.campaignName,
+                  const campCandidates = allCandidates.filter(
+                    (c: any) => c.campaign === camp.campaignName,
                   );
                   const total = campCandidates.length;
                   const interested = campCandidates.filter(
-                    (c) => c.status === "Interested",
+                    (c: any) => c.status === "Interested",
                   ).length;
                   const notInterested = campCandidates.filter(
-                    (c) => c.status === "Not Interested",
+                    (c: any) => c.status === "Not Interested",
                   ).length;
                   const pending = campCandidates.filter(
-                    (c) => !c.status || c.status === "New",
+                    (c: any) =>
+                      !c.status ||
+                      c.status === "New" ||
+                      c.status === "Assigned",
                   ).length;
                   return (
                     <tr
@@ -1749,11 +1805,51 @@ function NotificationsSection() {
 // ── Logs ───────────────────────────────────────────────────────────
 function LogsSection() {
   const { activityLogs, recruiters } = useCRMStore();
+  const { actor } = useActor();
   const [recruiterF, setRecruiterF] = useState("all");
   const [daysF, setDaysF] = useState("30");
+  const [canisterLogs, setCanisterLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!actor) return;
+      try {
+        const all = await actor.getAllAssignedCandidates();
+        const logs = (all as any[])
+          .filter(
+            (c) =>
+              c.updatedAt &&
+              c.status &&
+              c.status !== "" &&
+              c.status !== "Assigned" &&
+              c.status !== "New",
+          )
+          .map((c) => ({
+            id: `canister_${c.id}`,
+            recruiterId: c.assignedTo,
+            recruiterName: c.assignedTo,
+            action: "Campaign Response",
+            details: `[${c.campaign}] ${c.name} → ${c.status}`,
+            timestamp: c.updatedAt,
+          }))
+          .sort((a: any, b: any) => b.timestamp.localeCompare(a.timestamp));
+        setCanisterLogs(logs);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, [actor]);
+
+  // Merge canister logs with local logs, deduplicate by id
+  const allLogs = [...canisterLogs, ...activityLogs].filter(
+    (log, idx, arr) => arr.findIndex((l) => l.id === log.id) === idx,
+  );
 
   // period filter
-  const filtered = activityLogs.filter((l) => {
+  const filtered = allLogs.filter((l) => {
     if (recruiterF !== "all" && l.recruiterId !== recruiterF) return false;
     return true;
   });

@@ -194,7 +194,13 @@ export function todayDate(): string {
 
 /** Recompute recruiter stats purely from the candidates array */
 function computeStats(r: Recruiter, allCandidates: Candidate[]): Recruiter {
-  const rc = allCandidates.filter((c) => c.assignedRecruiter === r.id);
+  const rc = allCandidates.filter(
+    (c) =>
+      c.assignedRecruiter === r.id ||
+      (c.assignedTo &&
+        r.email &&
+        c.assignedTo.toLowerCase() === r.email.toLowerCase()),
+  );
   // A "call" = recruiter actually submitted a response (updatedAt is set)
   return {
     ...r,
@@ -384,13 +390,17 @@ export function useCRMState() {
         },
       ]),
     updateCandidate: (id, updates) => {
-      // Stamp updatedAt only when recruiter changes status
+      // Stamp updatedAt only when recruiter changes status (and caller didn't provide one)
       const isRecruiterResponse =
         updates.status !== undefined &&
         updates.status !== "New" &&
         (updates.status as string) !== "";
       const finalUpdates: Partial<Candidate> = isRecruiterResponse
-        ? { ...updates, updatedAt: new Date().toLocaleString("en-IN") }
+        ? {
+            ...updates,
+            updatedAt:
+              (updates as any).updatedAt || new Date().toLocaleString("en-IN"),
+          }
         : updates;
 
       setCandidates((prev) => {
