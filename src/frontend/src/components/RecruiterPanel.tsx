@@ -282,7 +282,7 @@ function CampaignListView({
       }
     };
     load();
-    const interval = setInterval(load, 5000);
+    const interval = setInterval(load, 3000);
     // Instantly update when campaign is created or deleted
     window.addEventListener("crm:campaignDeleted", load);
     window.addEventListener("crm:campaignCreated", load);
@@ -296,7 +296,7 @@ function CampaignListView({
   }, [actor, recruiterEmail]);
 
   const myCandidates =
-    canisterLoaded || apiCandidates.length > 0
+    apiCandidates.length > 0
       ? apiCandidates.filter(
           (c) =>
             (
@@ -305,10 +305,16 @@ function CampaignListView({
               ""
             ).toLowerCase() === (recruiterEmail || "").toLowerCase(),
         )
-      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
+      : !canisterLoaded
+        ? store.candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : [];
 
   const allCampaigns =
-    canisterLoaded || apiCampaigns.length > 0 ? apiCampaigns : store.campaigns;
+    apiCampaigns.length > 0
+      ? apiCampaigns
+      : !canisterLoaded
+        ? store.campaigns
+        : [];
 
   // Get unique campaign names from my candidates
   const myCampaignNames = Array.from(
@@ -353,7 +359,15 @@ function CampaignListView({
         🎯 My Campaigns
       </h1>
 
-      {myCampaigns.length === 0 ? (
+      {!canisterLoaded && myCampaigns.length === 0 ? (
+        <div
+          data-ocid="recruiter.campaigns.loading_state"
+          className="bg-white rounded-xl border border-border p-10 text-center"
+        >
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-foreground/50">Loading campaigns...</p>
+        </div>
+      ) : myCampaigns.length === 0 ? (
         <div
           data-ocid="recruiter.campaigns.empty_state"
           className="bg-white rounded-xl border border-border p-10 text-center"
@@ -363,7 +377,7 @@ function CampaignListView({
             No campaigns assigned yet
           </p>
           <p className="text-xs text-foreground/30 mt-1">
-            Ask your admin to assign leads under a campaign.
+            Contact your admin to assign leads under a campaign.
           </p>
         </div>
       ) : (
@@ -516,13 +530,15 @@ function CampaignDetailView({
   }, [actor, recruiterEmail, campaign.campaignName]);
 
   const leads =
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : store.candidates.filter(
-          (c) =>
-            c.assignedRecruiter === recruiterId &&
-            c.campaign === campaign.campaignName,
-        );
+      : !canisterLoaded
+        ? store.candidates.filter(
+            (c) =>
+              c.assignedRecruiter === recruiterId &&
+              c.campaign === campaign.campaignName,
+          )
+        : [];
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -868,9 +884,11 @@ function RecruiterDashboardTab({
   }, [actor, recruiterEmail]);
 
   const myCandidates =
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : candidates.filter((c) => c.assignedRecruiter === recruiterId);
+      : !canisterLoaded
+        ? candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : [];
 
   const todayISO = new Date().toISOString().split("T")[0];
   const callsTodayCount = myCandidates.filter((c) =>
@@ -1011,9 +1029,11 @@ function MyCandidatesTab({
   }, [actor, recruiterEmail]);
 
   const allCandidates =
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
+      : !canisterLoaded
+        ? store.candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : [];
 
   const myCandidates = allCandidates.filter((c) => {
     const q = search.toLowerCase();
@@ -1247,7 +1267,32 @@ function MyCandidatesTab({
               data-ocid="recruiter.update.submit_button"
               onClick={() => {
                 if (updateCandidate) {
-                  store.updateCandidate(updateCandidate.id, updateForm);
+                  const updatedAt = new Date().toISOString();
+                  const isResponse =
+                    updateForm.status === "Interested" ||
+                    updateForm.status === "Not Interested";
+                  const updates = isResponse
+                    ? { ...updateForm, updatedAt }
+                    : updateForm;
+                  store.updateCandidate(updateCandidate.id, updates);
+                  // Sync to ICP canister for cross-device visibility
+                  if (actor) {
+                    actor
+                      .updateCandidateStatus(
+                        updateCandidate.id,
+                        updateForm.status,
+                        updatedAt,
+                      )
+                      .catch(console.error);
+                  }
+                  if (getApiUrl()) {
+                    apiPost({
+                      type: "updateCandidate",
+                      id: updateCandidate.id,
+                      status: updateForm.status,
+                      updatedAt,
+                    }).catch(console.error);
+                  }
                   store.addActivityLog({
                     recruiterId,
                     recruiterName:
@@ -1257,6 +1302,9 @@ function MyCandidatesTab({
                     details: `${updateCandidate.name} → ${updateForm.status}`,
                   });
                   setUpdateCandidate(null);
+                  window.dispatchEvent(
+                    new CustomEvent("crm:responseSubmitted"),
+                  );
                 }
               }}
               style={{ background: "oklch(0.55 0.17 245)" }}
@@ -1437,12 +1485,18 @@ function FollowUpsTab({
   }, [actor, recruiterEmail]);
 
   const allCandidates =
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
+      : !canisterLoaded
+        ? store.candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : [];
 
   const allCampaigns =
-    canisterLoaded || apiCampaigns.length > 0 ? apiCampaigns : store.campaigns;
+    apiCampaigns.length > 0
+      ? apiCampaigns
+      : !canisterLoaded
+        ? store.campaigns
+        : [];
 
   // Filter Interested only, deduplicate by phone
   const seenPhones = new Set<string>();
@@ -1613,9 +1667,11 @@ function ActivityTab({
   }, [actorActivity, recruiterEmail]);
 
   const myCandidates = (
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : candidates.filter((c) => c.assignedRecruiter === recruiterId)
+      : !canisterLoaded
+        ? candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : []
   ).filter((c) => c.updatedAt);
 
   const last7: {
@@ -1645,9 +1701,11 @@ function ActivityTab({
   }
 
   const allMyCandidates =
-    canisterLoaded || apiLeads.length > 0
+    apiLeads.length > 0
       ? apiLeads
-      : candidates.filter((c) => c.assignedRecruiter === recruiterId);
+      : !canisterLoaded
+        ? candidates.filter((c) => c.assignedRecruiter === recruiterId)
+        : [];
   const totalResponses = allMyCandidates.filter(
     (c) => c.status === "Interested" || c.status === "Not Interested",
   ).length;

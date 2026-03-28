@@ -41,7 +41,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BarChart,
   CartesianGrid,
@@ -969,6 +969,27 @@ function RecruitersSection() {
 // ── Candidates ─────────────────────────────────────────────────────
 function CandidatesSection() {
   const store = useCRMStore();
+  const { actor } = useActor();
+  const [canisterCands, setCanisterCands] = useState<any[]>([]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    const load = async () => {
+      if (!actor) return;
+      try {
+        const all = await actor.getAllAssignedCandidates();
+        if (all && all.length > 0) setCanisterCands(all as any[]);
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 8000);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
+  }, [actor]);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [recruiterFilter, setRecruiterFilter] = useState("all");
@@ -1004,7 +1025,34 @@ function CandidatesSection() {
   };
   const [form, setForm] = useState(emptyForm);
 
-  const filtered = store.candidates.filter((c) => {
+  // Merge canister candidates with local store (canister wins for cross-device)
+  const allCandidatesForList =
+    canisterCands.length > 0
+      ? canisterCands.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email || "",
+          skills: c.skills || "",
+          status: c.status || "New",
+          assignedRecruiter:
+            store.recruiters.find(
+              (r) =>
+                r.email?.toLowerCase() === (c.assignedTo || "").toLowerCase(),
+            )?.id ||
+            c.assignedTo ||
+            "",
+          notes: c.notes || "",
+          followUpDate: c.followUpDate || "",
+          nextAction: (c.nextAction || "Call") as Candidate["nextAction"],
+          timestamp: c.assignDate || c.timestamp || "",
+          updatedAt: c.updatedAt,
+          batchId: c.batchId,
+          campaign: c.campaign,
+        }))
+      : store.candidates;
+
+  const filtered = allCandidatesForList.filter((c) => {
     const q = search.toLowerCase();
     if (q && !c.name.toLowerCase().includes(q) && !c.phone.includes(q))
       return false;
@@ -1679,31 +1727,28 @@ function NotificationsSection() {
   const store = useCRMStore();
   const { actor } = useActor();
 
-  // Fetch pending recruiter requests from ICP canister (cross-device sync)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional one-time fetch
-  useEffect(() => {
+  const fetchRequests = useCallback(async () => {
     if (!actor) return;
-    actor
-      .getSignupRequests()
-      .then((requests: any[]) => {
-        const pending = requests.filter((r: any) => r.status === "pending");
-        for (const r of pending) {
-          const alreadyIn = store.signupRequests.find(
-            (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
-          );
-          if (!alreadyIn) {
-            store.addSignupRequest({
-              name: r.name,
-              email: r.email,
-              password: r.password || "",
-            });
-          }
+    try {
+      const requests: any[] = await actor.getSignupRequests();
+      const pending = requests.filter((r: any) => r.status === "pending");
+      for (const r of pending) {
+        const alreadyIn = store.signupRequests.find(
+          (s: any) => s.email.toLowerCase() === r.email.toLowerCase(),
+        );
+        if (!alreadyIn) {
+          store.addSignupRequest({
+            name: r.name,
+            email: r.email,
+            password: r.password || "",
+          });
         }
-      })
-      .catch(() => {
-        // Fallback: try localStorage crm_signups
-        const stored = localStorage.getItem("crm_signups");
-        if (stored) {
+      }
+    } catch {
+      // Fallback: try localStorage crm_signups
+      const stored = localStorage.getItem("crm_signups");
+      if (stored) {
+        try {
           const reqs = JSON.parse(stored);
           for (const r of reqs) {
             const alreadyIn = store.signupRequests.find(
@@ -1717,18 +1762,35 @@ function NotificationsSection() {
               });
             }
           }
-        }
-      });
-  }, [actor]);
+        } catch {}
+      }
+    }
+  }, [actor, store]);
+
+  useEffect(() => {
+    fetchRequests();
+    const interval = setInterval(fetchRequests, 8000);
+    return () => clearInterval(interval);
+  }, [fetchRequests]);
 
   return (
     <div className="space-y-3">
-      <h2
-        className="font-bold text-lg"
-        style={{ color: "oklch(0.28 0.085 245)" }}
-      >
-        Signup Requests
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2
+          className="font-bold text-lg"
+          style={{ color: "oklch(0.28 0.085 245)" }}
+        >
+          Signup Requests
+        </h2>
+        <button
+          type="button"
+          data-ocid="notifications.refresh.button"
+          onClick={fetchRequests}
+          className="text-xs px-3 py-1 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+        >
+          ↻ Refresh
+        </button>
+      </div>
       {store.signupRequests.length === 0 ? (
         <div
           data-ocid="notifications.empty_state"
@@ -1860,7 +1922,15 @@ function LogsSection() {
 
   // period filter
   const filtered = allLogs.filter((l) => {
-    if (recruiterF !== "all" && l.recruiterId !== recruiterF) return false;
+    if (recruiterF !== "all") {
+      const matchedRecruiter = recruiters.find((r) => r.id === recruiterF);
+      const matchEmail = matchedRecruiter?.email?.toLowerCase() || "";
+      if (
+        l.recruiterId !== recruiterF &&
+        (l.recruiterId || "").toLowerCase() !== matchEmail
+      )
+        return false;
+    }
     return true;
   });
 

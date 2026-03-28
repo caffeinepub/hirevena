@@ -1756,7 +1756,23 @@ function LoginPage({
     password: "",
   });
   const [signupMsg, setSignupMsg] = useState("");
+  const [pendingRetry, setPendingRetry] = useState(false);
   const { actor } = useActor();
+
+  // Auto-retry login when actor becomes available (mobile cold-start fix)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only re-run when actor changes
+  useEffect(() => {
+    if (
+      actor &&
+      pendingRetry &&
+      username &&
+      password &&
+      selectedRole === "recruiter"
+    ) {
+      setPendingRetry(false);
+      handleLogin();
+    }
+  }, [actor]);
 
   const handleLogin = async () => {
     setError("");
@@ -1862,9 +1878,9 @@ function LoginPage({
           onNavigate("recruiterDashboard");
         } else {
           if (!actor) {
-            setError(
-              "Server is still connecting. Please wait a moment and try again.",
-            );
+            // Actor not ready yet — set pending retry so auto-retry kicks in when actor loads
+            setPendingRetry(true);
+            setError("");
           } else {
             setError("Invalid credentials or account not yet approved.");
           }
@@ -2138,14 +2154,20 @@ function LoginPage({
                     <X className="w-4 h-4" /> {error}
                   </p>
                 )}
+                {pendingRetry && (
+                  <div className="text-sm text-blue-600 flex items-center gap-2 py-2">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    Connecting to server, retrying login...
+                  </div>
+                )}
                 <Button
                   data-ocid="login.submit_button"
                   onClick={handleLogin}
-                  disabled={loading}
+                  disabled={loading || pendingRetry}
                   className="w-full h-11 font-semibold text-base mt-2"
                   style={{ background: "oklch(0.55 0.17 245)" }}
                 >
-                  {loading ? (
+                  {loading || pendingRetry ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     "Login"
