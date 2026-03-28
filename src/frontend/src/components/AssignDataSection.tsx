@@ -189,15 +189,41 @@ export default function AssignDataSection() {
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null);
   const [campaignFilter, setCampaignFilter] = useState("");
 
-  // Auto-refresh tracking tab
+  // Live canister candidates for accurate tracking stats
+  const [canisterCandidates, setCanisterCandidates] = useState<
+    import("../hooks/useCRMStore").Candidate[]
+  >([]);
+
+  // Auto-refresh tracking tab + fetch canister candidates
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setTick((p) => p + 1), 4000);
-    return () => clearInterval(t);
-  }, []);
+    const refresh = async () => {
+      setTick((p) => p + 1);
+      if (actor) {
+        try {
+          const all = await actor.getAllAssignedCandidates();
+          if (all && all.length >= 0) {
+            setCanisterCandidates(all as any[]);
+          }
+        } catch (e) {
+          console.error("getAllAssignedCandidates error:", e);
+        }
+      }
+    };
+    refresh();
+    const t = setInterval(refresh, 4000);
+    // Also refresh when a recruiter submits a response
+    const handler = () => refresh();
+    window.addEventListener("crm:responseSubmitted", handler);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("crm:responseSubmitted", handler);
+    };
+  }, [actor]);
   void tick;
 
   // Load campaigns from canister (shared across all devices)
+  // Uses campaign ID for deduplication to prevent race-condition duplicates
   // biome-ignore lint/correctness/useExhaustiveDependencies: store is a zustand store; methods are stable
   useEffect(() => {
     const loadCanisterCampaigns = async () => {
@@ -205,9 +231,12 @@ export default function AssignDataSection() {
       try {
         const canisterCampaigns = await actor.getCampaigns();
         if (canisterCampaigns && canisterCampaigns.length > 0) {
-          const currentNames = store.campaigns.map((sc) => sc.campaignName);
+          // Build a set of existing names (case-insensitive) to avoid duplicates
+          const currentNamesLower = new Set(
+            store.campaigns.map((sc) => sc.campaignName.toLowerCase()),
+          );
           for (const cc of canisterCampaigns) {
-            if (!currentNames.includes(cc.campaignName)) {
+            if (!currentNamesLower.has(cc.campaignName.toLowerCase())) {
               store.addCampaign({
                 campaignName: cc.campaignName,
                 companyName: cc.companyName,
@@ -215,6 +244,7 @@ export default function AssignDataSection() {
                 location: cc.location,
                 salary: cc.salary,
               });
+              currentNamesLower.add(cc.campaignName.toLowerCase());
             }
           }
         }
@@ -381,13 +411,28 @@ export default function AssignDataSection() {
       setCampaignFormError("Campaign name is required.");
       return;
     }
-    store.addCampaign({
+    // Duplicate check (case-insensitive)
+    const nameLower = campaignForm.campaignName.trim().toLowerCase();
+    const alreadyExists = store.campaigns.some(
+      (c) => c.campaignName.toLowerCase() === nameLower,
+    );
+    if (alreadyExists) {
+      setCampaignFormError(
+        "A campaign with this name already exists. Please use a unique name.",
+      );
+      return;
+    }
+    const added = store.addCampaign({
       campaignName: campaignForm.campaignName.trim(),
       companyName: campaignForm.companyName.trim(),
       role: campaignForm.role.trim(),
       location: campaignForm.location.trim(),
       salary: campaignForm.salary.trim(),
     });
+    if (!added) {
+      setCampaignFormError("Campaign already exists.");
+      return;
+    }
     if (getApiUrl()) {
       apiPost({
         type: "createCampaign",
@@ -413,6 +458,45 @@ export default function AssignDataSection() {
     setShowCampaignModal(false);
     setCampaignForm(EMPTY_CAMPAIGN_FORM);
     setCampaignFormError("");
+    // Notify recruiter panel to refresh instantly
+    window.dispatchEvent(new CustomEvent("crm:campaignCreated"));
+  };
+
+  // Delete Campaign
+  const handleDeleteCampaign = async (
+    campaign: Campaign,
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `Delete campaign "${campaign.campaignName}"? This will also remove all associated leads. This cannot be undone.`,
+      )
+    )
+      return;
+
+    // Remove from local store (campaigns + candidates + batches)
+    store.deleteCampaign(campaign.id);
+
+    // Remove from ICP canister
+    if (actor) {
+      try {
+        await (actor as any).deleteCampaign(BigInt(campaign.id));
+      } catch (e) {
+        console.error("Canister deleteCampaign error:", e);
+      }
+    }
+
+    // Remove from Google Apps Script API if configured
+    if (getApiUrl()) {
+      apiPost({
+        type: "deleteCampaign",
+        campaignName: campaign.campaignName,
+      }).catch(console.error);
+    }
+
+    // Dispatch event so recruiter panel updates instantly
+    window.dispatchEvent(new CustomEvent("crm:campaignDeleted"));
   };
 
   // Assign
@@ -521,11 +605,22 @@ export default function AssignDataSection() {
     setViewBatch(batchId);
   };
 
-  // Per-batch stats
+  // Per-batch stats — uses live canister data when available for real-time accuracy
   const getBatchStats = (batch: Batch) => {
-    const candidates = store.candidates.filter((c) => c.batchId === batch.id);
-    const total = candidates.length;
-    const callsDone = candidates.filter((c) => !!c.updatedAt).length;
+    // Prefer canister candidates (live, cross-device) over local store
+    const liveCandidates =
+      canisterCandidates.length > 0 ? canisterCandidates : store.candidates;
+    const candidates = liveCandidates.filter((c) => c.batchId === batch.id);
+    const total = candidates.length || batch.totalImported;
+    // Total Calls = status NOT empty (recruiter has responded)
+    const callsDone = candidates.filter(
+      (c) =>
+        !!c.updatedAt ||
+        (c.status &&
+          (c.status as string) !== "" &&
+          c.status !== "New" &&
+          c.status !== "Assigned"),
+    ).length;
     const interested = candidates.filter(
       (c) => c.status === "Interested",
     ).length;
@@ -533,9 +628,15 @@ export default function AssignDataSection() {
       (c) => c.status === "Not Interested",
     ).length;
     const followUps = candidates.filter((c) => c.status === "Follow-up").length;
-    const joining = candidates.filter(
-      (c) => c.nextAction === "Interview" && c.status === "Interested",
+    // Pending = status empty or "New" / "Assigned"
+    const pending = candidates.filter(
+      (c) =>
+        !c.status ||
+        (c.status as string) === "" ||
+        c.status === "New" ||
+        c.status === "Assigned",
     ).length;
+    const joining = candidates.filter((c) => c.status === "Interested").length;
     const convPct = total > 0 ? Math.round((interested / total) * 100) : 0;
     return {
       total,
@@ -543,18 +644,33 @@ export default function AssignDataSection() {
       interested,
       notInterested,
       followUps,
+      pending,
       joining,
       convPct,
     };
   };
 
   const getRecruiterStats = (batch: Batch) => {
+    const liveCandidates =
+      canisterCandidates.length > 0 ? canisterCandidates : store.candidates;
     return batch.recruiterAssignments.map(({ recruiterId, count }) => {
       const recruiter = store.recruiters.find((r) => r.id === recruiterId);
-      const batchCands = store.candidates.filter(
-        (c) => c.batchId === batch.id && c.assignedRecruiter === recruiterId,
+      const recruiterEmail = recruiter?.email?.toLowerCase() || "";
+      const batchCands = liveCandidates.filter(
+        (c) =>
+          c.batchId === batch.id &&
+          (c.assignedRecruiter === recruiterId ||
+            (recruiterEmail &&
+              (c.assignedTo || "").toLowerCase() === recruiterEmail)),
       );
-      const callsDone = batchCands.filter((c) => !!c.updatedAt).length;
+      const callsDone = batchCands.filter(
+        (c) =>
+          !!c.updatedAt ||
+          (c.status &&
+            (c.status as string) !== "" &&
+            c.status !== "New" &&
+            c.status !== "Assigned"),
+      ).length;
       const interested = batchCands.filter(
         (c) => c.status === "Interested",
       ).length;
@@ -651,17 +767,40 @@ export default function AssignDataSection() {
     ? store.batches.filter((b) => b.campaign === campaignFilter)
     : store.batches;
 
-  // Campaign stats summary for list view
+  // Campaign stats summary for list view — uses canister for live accuracy
   const getCampaignSummary = (campaignName: string) => {
     const batches = store.batches.filter((b) => b.campaign === campaignName);
     const total = batches.reduce((sum, b) => sum + b.totalImported, 0);
-    const candidates = store.candidates.filter(
+    const liveCandidates =
+      canisterCandidates.length > 0 ? canisterCandidates : store.candidates;
+    const candidates = liveCandidates.filter(
       (c) => c.campaign === campaignName,
     );
     const interested = candidates.filter(
       (c) => c.status === "Interested",
     ).length;
-    return { total, interested, batchCount: batches.length };
+    const pending = candidates.filter(
+      (c) =>
+        !c.status ||
+        (c.status as string) === "" ||
+        c.status === "New" ||
+        c.status === "Assigned",
+    ).length;
+    const totalCalls = candidates.filter(
+      (c) =>
+        !!c.updatedAt ||
+        (c.status &&
+          (c.status as string) !== "" &&
+          c.status !== "New" &&
+          c.status !== "Assigned"),
+    ).length;
+    return {
+      total: Math.max(total, candidates.length),
+      interested,
+      pending,
+      totalCalls,
+      batchCount: batches.length,
+    };
   };
 
   return (
@@ -819,13 +958,36 @@ export default function AssignDataSection() {
                               </strong>
                             </span>
                             <span className="text-xs text-foreground/50">
+                              Calls:{" "}
+                              <strong className="text-blue-600">
+                                {summary.totalCalls}
+                              </strong>
+                            </span>
+                            <span className="text-xs text-foreground/50">
                               Interested:{" "}
                               <strong className="text-green-600">
                                 {summary.interested}
                               </strong>
                             </span>
+                            <span className="text-xs text-foreground/50">
+                              Pending:{" "}
+                              <strong className="text-yellow-600">
+                                {summary.pending}
+                              </strong>
+                            </span>
                           </div>
                         )}
+                        {/* Delete button */}
+                        <div className="mt-3 pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            data-ocid="assign.campaign.delete_button"
+                            onClick={(e) => handleDeleteCampaign(campaign, e)}
+                            className="text-xs px-2 py-1 rounded text-red-500 hover:bg-red-50 border border-red-200 hover:border-red-400 transition-colors font-medium"
+                          >
+                            🗑 Delete Campaign
+                          </button>
+                        </div>
                       </button>
                     );
                   })}

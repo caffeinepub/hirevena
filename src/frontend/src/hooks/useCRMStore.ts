@@ -246,7 +246,8 @@ interface CRMStore {
   addCandidate: (c: Omit<Candidate, "id" | "timestamp">) => void;
   addCandidateWithBatch: (c: Omit<Candidate, "id" | "timestamp">) => string;
   addBatch: (batch: Batch) => void;
-  addCampaign: (c: Omit<Campaign, "id" | "createdAt">) => void;
+  addCampaign: (c: Omit<Campaign, "id" | "createdAt">) => boolean;
+  deleteCampaign: (id: string) => void;
   updateCandidate: (id: string, updates: Partial<Candidate>) => void;
   deleteCandidate: (id: string) => void;
   addRecruiter: (
@@ -355,15 +356,43 @@ export function useCRMState() {
     crmConfig,
     currentUser,
     addBatch: (batch) => setBatches((prev) => [...prev, batch]),
-    addCampaign: (c) =>
-      setCampaigns((prev) => [
-        ...prev,
-        {
-          ...c,
-          id: genId("CAM"),
-          createdAt: new Date().toISOString().split("T")[0],
-        },
-      ]),
+    addCampaign: (c) => {
+      // Prevent duplicate campaigns (case-insensitive name check)
+      let isDuplicate = false;
+      setCampaigns((prev) => {
+        const nameLower = c.campaignName.trim().toLowerCase();
+        if (
+          prev.some(
+            (existing) => existing.campaignName.toLowerCase() === nameLower,
+          )
+        ) {
+          isDuplicate = true;
+          return prev;
+        }
+        return [
+          ...prev,
+          {
+            ...c,
+            id: genId("CAM"),
+            createdAt: new Date().toISOString().split("T")[0],
+          },
+        ];
+      });
+      return !isDuplicate;
+    },
+    deleteCampaign: (id) => {
+      // Find campaign name before removing (for candidate cleanup)
+      const campaignToDelete = campaigns.find((c) => c.id === id);
+      setCampaigns((prev) => prev.filter((c) => c.id !== id));
+      if (campaignToDelete) {
+        setCandidates((prev) =>
+          prev.filter((c) => c.campaign !== campaignToDelete.campaignName),
+        );
+        setBatches((prev) =>
+          prev.filter((b) => b.campaign !== campaignToDelete.campaignName),
+        );
+      }
+    },
     addCandidateWithBatch: (c) => {
       const id = genId("C");
       setCandidates((prev) => [

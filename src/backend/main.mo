@@ -183,7 +183,17 @@ actor {
     array.sort();
   };
 
+  // Create campaign — prevents duplicates by checking existing names (case-insensitive)
   public shared ({ caller }) func createCampaign(campaignName : Text, companyName : Text, role : Text, location : Text, salary : Text) : async Nat {
+    let nameLower = campaignName.toLower();
+    // Check for existing campaign with same name
+    let existing = campaigns.toArray().filter(func((id, c)) {
+      c.campaignName.toLower() == nameLower
+    });
+    if (existing.size() > 0) {
+      // Return existing campaign id (no duplicate created)
+      return existing[0].0;
+    };
     let campaign : Campaign = {
       id = nextCampaignId;
       campaignName;
@@ -196,6 +206,24 @@ actor {
     campaigns.add(nextCampaignId, campaign);
     nextCampaignId += 1;
     campaign.id;
+  };
+
+  // Delete campaign and all associated candidates
+  public shared ({ caller }) func deleteCampaign(id : Nat) : async Bool {
+    switch (campaigns.get(id)) {
+      case (null) { false };
+      case (?campaign) {
+        campaigns.remove(id);
+        // Remove all candidates linked to this campaign
+        let toDelete = assignedCandidates.toArray().filter(
+          func((cid, c)) { c.campaign == campaign.campaignName }
+        ).map(func((cid, c)) { cid });
+        for (cid in toDelete.vals()) {
+          assignedCandidates.remove(cid);
+        };
+        true;
+      };
+    };
   };
 
   // FIX: status = "" (empty), updatedAt = "" (empty) — never auto-fill

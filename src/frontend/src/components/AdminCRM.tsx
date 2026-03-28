@@ -274,6 +274,7 @@ function DashboardSection() {
   const { recruiters, candidates, campaigns } = useCRMStore();
   const { actor } = useActor();
   const [canisterCandidates, setCanisterCandidates] = useState<any[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -281,19 +282,27 @@ function DashboardSection() {
       if (!actor) return;
       try {
         const all = await actor.getAllAssignedCandidates();
-        if (all && all.length > 0) setCanisterCandidates(all as any[]);
+        setCanisterCandidates(all as any[]);
+        setCanisterLoaded(true);
       } catch (e) {
         console.error("Admin dashboard canister fetch error:", e);
       }
     };
     load();
     const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
   }, [actor]);
 
   // Use canisterCandidates if available, else fall back to store.candidates
-  const allCandidates =
-    canisterCandidates.length > 0 ? canisterCandidates : candidates;
+  const allCandidates = canisterLoaded
+    ? canisterCandidates
+    : canisterCandidates.length > 0
+      ? canisterCandidates
+      : candidates;
 
   const todayISO = new Date().toISOString().split("T")[0];
   const callsToday = allCandidates.filter((c: any) =>

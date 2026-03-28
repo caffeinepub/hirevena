@@ -133,9 +133,17 @@ export default function RecruiterPanel({ currentUser, onLogout }: Props) {
           />
         )}
         {tab === "candidates" && (
-          <MyCandidatesTab recruiterId={currentUser.id} />
+          <MyCandidatesTab
+            recruiterId={currentUser.id}
+            recruiterEmail={currentUser.email}
+          />
         )}
-        {tab === "followups" && <FollowUpsTab recruiterId={currentUser.id} />}
+        {tab === "followups" && (
+          <FollowUpsTab
+            recruiterId={currentUser.id}
+            recruiterEmail={currentUser.email}
+          />
+        )}
         {tab === "activity" && (
           <ActivityTab
             recruiterId={currentUser.id}
@@ -220,6 +228,7 @@ function CampaignListView({
     import("../hooks/useCRMStore").Candidate[]
   >([]);
   const [apiCampaigns, setApiCampaigns] = useState<Campaign[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
 
   const { actor } = useActor();
 
@@ -237,22 +246,19 @@ function CampaignListView({
           ]);
           console.log("Logged user:", userEmail);
           console.log("Fetched data (canister):", canisterCandidates);
-          if (canisterCandidates && canisterCandidates.length > 0) {
-            setApiCandidates(canisterCandidates as any);
-          }
-          if (canisterCampaigns && canisterCampaigns.length > 0) {
-            setApiCampaigns(
-              canisterCampaigns.map((c) => ({
-                id: String(c.id),
-                campaignName: c.campaignName,
-                companyName: c.companyName,
-                role: c.role,
-                location: c.location,
-                salary: c.salary,
-                createdAt: c.createdAt,
-              })),
-            );
-          }
+          setApiCandidates(canisterCandidates as any);
+          setApiCampaigns(
+            (canisterCampaigns || []).map((c) => ({
+              id: String(c.id),
+              campaignName: c.campaignName,
+              companyName: c.companyName,
+              role: c.role,
+              location: c.location,
+              salary: c.salary,
+              createdAt: c.createdAt,
+            })),
+          );
+          setCanisterLoaded(true);
           return; // canister data loaded, skip API fallback
         } catch (e) {
           console.error("Canister fetch error:", e);
@@ -277,11 +283,20 @@ function CampaignListView({
     };
     load();
     const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    // Instantly update when campaign is created or deleted
+    window.addEventListener("crm:campaignDeleted", load);
+    window.addEventListener("crm:campaignCreated", load);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:campaignDeleted", load);
+      window.removeEventListener("crm:campaignCreated", load);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
   }, [actor, recruiterEmail]);
 
   const myCandidates =
-    apiCandidates.length > 0
+    canisterLoaded || apiCandidates.length > 0
       ? apiCandidates.filter(
           (c) =>
             (
@@ -292,13 +307,8 @@ function CampaignListView({
         )
       : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
 
-  const allCampaigns = [
-    ...store.campaigns,
-    ...apiCampaigns.filter(
-      (ac) =>
-        !store.campaigns.find((sc) => sc.campaignName === ac.campaignName),
-    ),
-  ];
+  const allCampaigns =
+    canisterLoaded || apiCampaigns.length > 0 ? apiCampaigns : store.campaigns;
 
   // Get unique campaign names from my candidates
   const myCampaignNames = Array.from(
@@ -462,6 +472,7 @@ function CampaignDetailView({
   >("Interested");
   const [toast, setToast] = useState("");
   const [apiLeads, setApiLeads] = useState<Candidate[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -475,11 +486,10 @@ function CampaignDetailView({
             userEmail,
             campaign.campaignName,
           );
-          if (canisterLeads && canisterLeads.length > 0) {
-            console.log("Fetched data (canister):", canisterLeads);
-            setApiLeads(canisterLeads as any);
-            return;
-          }
+          console.log("Fetched data (canister):", canisterLeads);
+          setApiLeads(canisterLeads as any);
+          setCanisterLoaded(true);
+          return;
         } catch (e) {
           console.error("Canister detail fetch error:", e);
         }
@@ -506,7 +516,7 @@ function CampaignDetailView({
   }, [actor, recruiterEmail, campaign.campaignName]);
 
   const leads =
-    apiLeads.length > 0
+    canisterLoaded || apiLeads.length > 0
       ? apiLeads
       : store.candidates.filter(
           (c) =>
@@ -811,6 +821,7 @@ function RecruiterDashboardTab({
   const [apiLeads, setApiLeads] = useState<
     import("../hooks/useCRMStore").Candidate[]
   >([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
 
   const { actor } = useActor();
 
@@ -823,12 +834,11 @@ function RecruiterDashboardTab({
             (recruiterEmail || "").toLowerCase(),
             "",
           );
-          if (canisterLeads && canisterLeads.length > 0) {
-            setApiLeads(canisterLeads as any);
-            console.log("Logged user:", recruiterEmail);
-            console.log("Fetched data:", canisterLeads);
-            return;
-          }
+          setApiLeads(canisterLeads as any);
+          setCanisterLoaded(true);
+          console.log("Logged user:", recruiterEmail);
+          console.log("Fetched data:", canisterLeads);
+          return;
         } catch (e) {
           console.error("Canister dashboard fetch error:", e);
         }
@@ -841,7 +851,7 @@ function RecruiterDashboardTab({
           recruiter: recruiterEmail.toLowerCase(),
         });
         const leads = (data as any)?.data || data || [];
-        if (Array.isArray(leads) && leads.length > 0) setApiLeads(leads);
+        if (Array.isArray(leads)) setApiLeads(leads);
         console.log("Logged user:", recruiterEmail);
         console.log("Fetched data:", leads);
       } catch (e) {
@@ -858,7 +868,7 @@ function RecruiterDashboardTab({
   }, [actor, recruiterEmail]);
 
   const myCandidates =
-    apiLeads.length > 0
+    canisterLoaded || apiLeads.length > 0
       ? apiLeads
       : candidates.filter((c) => c.assignedRecruiter === recruiterId);
 
@@ -937,14 +947,20 @@ function RecruiterDashboardTab({
 }
 
 // ── My Candidates Tab ─────────────────────────────────────────────
-function MyCandidatesTab({ recruiterId }: { recruiterId: string }) {
+function MyCandidatesTab({
+  recruiterId,
+  recruiterEmail,
+}: { recruiterId: string; recruiterEmail?: string }) {
   const store = useCRMStore();
+  const { actor } = useActor();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [updateCandidate, setUpdateCandidate] = useState<Candidate | null>(
     null,
   );
   const [showAdd, setShowAdd] = useState(false);
+  const [apiLeads, setApiLeads] = useState<Candidate[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
   const [updateForm, setUpdateForm] = useState({
     status: "New" as Candidate["status"],
     notes: "",
@@ -959,12 +975,58 @@ function MyCandidatesTab({ recruiterId }: { recruiterId: string }) {
     notes: "",
   });
 
-  const myCandidates = store.candidates.filter((c) => {
-    if (c.assignedRecruiter !== recruiterId) return false;
+  useEffect(() => {
+    const load = async () => {
+      const userEmail = (recruiterEmail || "").toLowerCase();
+      if (!userEmail) return;
+      if (actor) {
+        try {
+          const canisterLeads = await actor.getAssignedCandidates(
+            userEmail,
+            "",
+          );
+          setApiLeads(canisterLeads as any);
+          setCanisterLoaded(true);
+          return;
+        } catch (e) {
+          console.error("Canister candidates fetch error:", e);
+        }
+      }
+      if (!getApiUrl()) return;
+      try {
+        const data = await apiFetch({ type: "leads", recruiter: userEmail });
+        const leads = (data as any)?.data || data || [];
+        if (Array.isArray(leads)) setApiLeads(leads);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
+  }, [actor, recruiterEmail]);
+
+  const allCandidates =
+    canisterLoaded || apiLeads.length > 0
+      ? apiLeads
+      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
+
+  const myCandidates = allCandidates.filter((c) => {
     const q = search.toLowerCase();
     if (q && !c.name.toLowerCase().includes(q) && !c.phone.includes(q))
       return false;
-    if (statusFilter !== "all" && c.status !== statusFilter) return false;
+    if (statusFilter !== "all") {
+      const label = getStatusLabel(c.status);
+      if (statusFilter === "Pending") {
+        if (label !== "Pending") return false;
+      } else {
+        if (c.status !== statusFilter) return false;
+      }
+    }
     return true;
   });
 
@@ -1038,9 +1100,18 @@ function MyCandidatesTab({ recruiterId }: { recruiterId: string }) {
             <div className="flex items-start justify-between mb-2">
               <div>
                 <h3 className="font-bold text-base">{c.name}</h3>
-                {c.followUpDate && (
-                  <p className="text-xs text-foreground/50">
-                    Follow-up: {c.followUpDate}
+                {c.phone && (
+                  <p className="text-xs text-foreground/50">{c.phone}</p>
+                )}
+                {c.updatedAt && (
+                  <p className="text-xs text-foreground/40">
+                    Updated:{" "}
+                    {new Date(c.updatedAt).toLocaleString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </p>
                 )}
               </div>
@@ -1304,104 +1375,186 @@ function MyCandidatesTab({ recruiterId }: { recruiterId: string }) {
 }
 
 // ── Follow-ups Tab ────────────────────────────────────────────────
-function FollowUpsTab({ recruiterId }: { recruiterId: string }) {
+function FollowUpsTab({
+  recruiterId,
+  recruiterEmail,
+}: { recruiterId: string; recruiterEmail?: string }) {
   const store = useCRMStore();
-  const today = new Date().toISOString().split("T")[0];
+  const { actor } = useActor();
+  const [apiLeads, setApiLeads] = useState<Candidate[]>([]);
+  const [apiCampaigns, setApiCampaigns] = useState<Campaign[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
 
-  const myFollowUps = store.candidates.filter(
-    (c) => c.assignedRecruiter === recruiterId && c.followUpDate,
-  );
-  const overdue = myFollowUps.filter((c) => c.followUpDate < today);
-  const todayItems = myFollowUps.filter((c) => c.followUpDate === today);
-  const upcoming = myFollowUps.filter((c) => c.followUpDate > today);
+  useEffect(() => {
+    const load = async () => {
+      const userEmail = (recruiterEmail || "").toLowerCase();
+      if (!userEmail) return;
+      if (actor) {
+        try {
+          const [canisterLeads, canisterCampaigns] = await Promise.all([
+            actor.getAssignedCandidates(userEmail, ""),
+            actor.getCampaigns(),
+          ]);
+          setApiLeads(canisterLeads as any);
+          setApiCampaigns(
+            (canisterCampaigns || []).map((c) => ({
+              id: String(c.id),
+              campaignName: c.campaignName,
+              companyName: c.companyName,
+              role: c.role,
+              location: c.location,
+              salary: c.salary,
+              createdAt: c.createdAt,
+            })),
+          );
+          setCanisterLoaded(true);
+          return;
+        } catch (e) {
+          console.error("Canister followups fetch error:", e);
+        }
+      }
+      if (!getApiUrl()) return;
+      try {
+        const [leadsData, campaignsData] = await Promise.all([
+          apiFetch({ type: "leads", recruiter: userEmail }),
+          apiFetch({ type: "campaigns" }),
+        ]);
+        const leads = (leadsData as any)?.data || leadsData || [];
+        const campaigns = (campaignsData as any)?.data || campaignsData || [];
+        if (Array.isArray(leads)) setApiLeads(leads);
+        if (Array.isArray(campaigns)) setApiCampaigns(campaigns);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    window.addEventListener("crm:responseSubmitted", load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("crm:responseSubmitted", load);
+    };
+  }, [actor, recruiterEmail]);
 
-  const FollowItem = ({ c, idx }: { c: Candidate; idx: number }) => (
-    <div
-      data-ocid={`recruiter.followups.item.${idx}`}
-      className="bg-white rounded-xl border border-border p-3"
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="font-semibold text-sm">{c.name}</p>
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full ${
-            STATUS_COLORS[getStatusLabel(c.status)] ||
-            "bg-gray-100 text-gray-500"
-          }`}
-        >
-          {getStatusLabel(c.status)}
-        </span>
-      </div>
-      <p className="text-xs text-foreground/50 mb-2">
-        {c.followUpDate} · {c.nextAction}
-      </p>
-      <div className="flex gap-2">
-        <a
-          href={`tel:${c.phone}`}
-          className="flex-1 text-center text-xs py-1.5 rounded-lg border border-border font-medium hover:bg-muted"
-        >
-          📞 Call
-        </a>
-        <a
-          href={`https://wa.me/${c.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi ${c.name}, calling from Hirevena.`)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 text-center text-xs py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 font-medium"
-        >
-          💬 WhatsApp
-        </a>
-        <button
-          type="button"
-          className="flex-1 text-center text-xs py-1.5 rounded-lg border font-medium hover:bg-muted"
-          onClick={() =>
-            store.updateCandidate(c.id, { followUpDate: "", status: "Called" })
-          }
-        >
-          ✓ Done
-        </button>
-      </div>
-    </div>
-  );
+  const allCandidates =
+    canisterLoaded || apiLeads.length > 0
+      ? apiLeads
+      : store.candidates.filter((c) => c.assignedRecruiter === recruiterId);
 
-  const Section = ({
-    title,
-    items,
-    headerClass,
-  }: { title: string; items: Candidate[]; headerClass: string }) => (
-    <div>
-      <h3
-        className={`text-sm font-bold px-3 py-1.5 rounded-t-lg mb-2 ${headerClass}`}
-      >
-        {title} ({items.length})
-      </h3>
-      {items.length === 0 ? (
-        <p className="text-center text-foreground/30 text-sm py-2">None</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map((c, i) => (
-            <FollowItem key={c.id} c={c} idx={i + 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const allCampaigns =
+    canisterLoaded || apiCampaigns.length > 0 ? apiCampaigns : store.campaigns;
+
+  // Filter Interested only, deduplicate by phone
+  const seenPhones = new Set<string>();
+  const interestedCandidates = allCandidates.filter((c) => {
+    if (c.status !== "Interested") return false;
+    const phone = (c.phone || "").replace(/[^0-9]/g, "");
+    if (seenPhones.has(phone)) return false;
+    seenPhones.add(phone);
+    return true;
+  });
+
+  const getCampaignRole = (campaignName: string): string => {
+    const found = allCampaigns.find((cam) => cam.campaignName === campaignName);
+    return found?.role || campaignName || "the position";
+  };
 
   return (
-    <div className="space-y-5">
-      <Section
-        title="🚨 Overdue"
-        items={overdue}
-        headerClass="bg-red-100 text-red-700"
-      />
-      <Section
-        title="⏰ Today"
-        items={todayItems}
-        headerClass="bg-yellow-100 text-yellow-700"
-      />
-      <Section
-        title="🗓 Upcoming"
-        items={upcoming}
-        headerClass="bg-blue-100 text-blue-700"
-      />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1
+          className="font-bold text-lg"
+          style={{ color: "oklch(0.28 0.085 245)" }}
+        >
+          ✅ Follow-Up List
+        </h1>
+        <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">
+          {interestedCandidates.length} Interested
+        </span>
+      </div>
+
+      {interestedCandidates.length === 0 ? (
+        <div
+          data-ocid="recruiter.followups.empty_state"
+          className="bg-white rounded-xl border border-border p-10 text-center"
+        >
+          <ChevronRight className="w-10 h-10 mx-auto text-foreground/20 mb-3" />
+          <p className="font-semibold text-foreground/50">No follow-ups yet</p>
+          <p className="text-xs text-foreground/30 mt-1">
+            Candidates marked as Interested will appear here automatically.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {interestedCandidates.map((c, i) => {
+            const role = getCampaignRole((c as any).campaign || "");
+            const waMessage = encodeURIComponent(
+              `Hi ${c.name}, regarding your job application for ${role}, we would like to follow up with you. Please let us know your availability. - Hirevena Team`,
+            );
+            const waUrl = `https://wa.me/${c.phone.replace(/[^0-9]/g, "")}?text=${waMessage}`;
+            return (
+              <div
+                key={c.id}
+                data-ocid={`recruiter.followups.item.${i + 1}`}
+                className="bg-white rounded-xl border border-border p-4"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-bold text-base">{c.name}</p>
+                    <p className="text-xs text-foreground/50">{c.phone}</p>
+                    {(c as any).campaign && (
+                      <p className="text-xs text-blue-600 mt-0.5">
+                        📋 {(c as any).campaign}
+                        {role && role !== (c as any).campaign
+                          ? ` · ${role}`
+                          : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">
+                      ✅ Interested
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-700">
+                      ⏳ Pending
+                    </span>
+                  </div>
+                </div>
+                {c.updatedAt && (
+                  <p className="text-xs text-foreground/40 mb-3">
+                    🕐{" "}
+                    {new Date(c.updatedAt).toLocaleString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <a
+                    href={`tel:${c.phone}`}
+                    data-ocid={`recruiter.followups.call.button.${i + 1}`}
+                    className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl font-bold text-sm text-white"
+                    style={{ background: "oklch(0.55 0.17 245)" }}
+                  >
+                    <Phone className="w-4 h-4" /> Call
+                  </a>
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-ocid={`recruiter.followups.whatsapp.button.${i + 1}`}
+                    className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl font-bold text-sm bg-green-500 text-white"
+                  >
+                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1417,6 +1570,7 @@ function ActivityTab({
   const [apiLeads, setApiLeads] = useState<
     import("../hooks/useCRMStore").Candidate[]
   >([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
 
   const { actor: actorActivity } = useActor();
 
@@ -1429,10 +1583,9 @@ function ActivityTab({
             (recruiterEmail || "").toLowerCase(),
             "",
           );
-          if (canisterLeads && canisterLeads.length > 0) {
-            setApiLeads(canisterLeads as any);
-            return;
-          }
+          setApiLeads(canisterLeads as any);
+          setCanisterLoaded(true);
+          return;
         } catch (e) {
           console.error("Canister activity fetch error:", e);
         }
@@ -1445,7 +1598,7 @@ function ActivityTab({
           recruiter: recruiterEmail.toLowerCase(),
         });
         const leads = (data as any)?.data || data || [];
-        if (Array.isArray(leads) && leads.length > 0) setApiLeads(leads);
+        if (Array.isArray(leads)) setApiLeads(leads);
       } catch (e) {
         console.error(e);
       }
@@ -1460,7 +1613,7 @@ function ActivityTab({
   }, [actorActivity, recruiterEmail]);
 
   const myCandidates = (
-    apiLeads.length > 0
+    canisterLoaded || apiLeads.length > 0
       ? apiLeads
       : candidates.filter((c) => c.assignedRecruiter === recruiterId)
   ).filter((c) => c.updatedAt);
@@ -1492,7 +1645,7 @@ function ActivityTab({
   }
 
   const allMyCandidates =
-    apiLeads.length > 0
+    canisterLoaded || apiLeads.length > 0
       ? apiLeads
       : candidates.filter((c) => c.assignedRecruiter === recruiterId);
   const totalResponses = allMyCandidates.filter(

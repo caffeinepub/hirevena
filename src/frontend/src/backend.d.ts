@@ -55,6 +55,7 @@ export interface backendInterface {
     addAssignedCandidate(id: string, name: string, phone: string, email: string, skills: string, assignedTo: string, campaign: string, batchId: string, assignDate: string): Promise<boolean>;
     approveSignupRequest(email: string): Promise<boolean>;
     createCampaign(campaignName: string, companyName: string, role: string, location: string, salary: string): Promise<bigint>;
+    deleteCampaign(id: bigint): Promise<boolean>;
     createSubmission(companyName: string, contactName: string, phoneNumber: string, emailAddress: string, role: string, positions: string, urgency: string): Promise<void>;
     deleteSubmission(id: bigint): Promise<boolean>;
     getAllAssignedCandidates(): Promise<Array<AssignedCandidate>>;
