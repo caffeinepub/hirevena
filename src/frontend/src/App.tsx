@@ -1756,141 +1756,203 @@ function LoginPage({
     password: "",
   });
   const [signupMsg, setSignupMsg] = useState("");
-  const [pendingRetry, setPendingRetry] = useState(false);
+  const [connectingMsg, setConnectingMsg] = useState("");
   const { actor } = useActor();
+  const actorRef = useRef(actor);
+  const retryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-retry login when actor becomes available (mobile cold-start fix)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only re-run when actor changes
   useEffect(() => {
-    if (
-      actor &&
-      pendingRetry &&
-      username &&
-      password &&
-      selectedRole === "recruiter"
-    ) {
-      setPendingRetry(false);
-      handleLogin();
-    }
+    actorRef.current = actor;
   }, [actor]);
+
+  // Clean up interval on unmount
+  useEffect(
+    () => () => {
+      if (retryIntervalRef.current) clearInterval(retryIntervalRef.current);
+    },
+    [],
+  );
 
   const handleLogin = async () => {
     setError("");
+    setConnectingMsg("");
     setLoading(true);
-    try {
-      if (
-        selectedRole === "admin" &&
-        username === "UjjwalShakya" &&
-        password === "80907120"
-      ) {
-        onLoginSuccess({
-          role: "admin",
-          id: "admin",
-          name: "Admin",
-          email: "admin@hirevena.com",
-        });
-        onNavigate("adminDashboard");
-      } else if (selectedRole === "recruiter") {
-        const stored = localStorage.getItem("crm_recruiters");
-        const recruiters = stored ? JSON.parse(stored) : [];
-        let found = recruiters.find(
-          (r: {
-            email: string;
-            password: string;
-            status: string;
-            id: string;
-            name: string;
-          }) =>
-            r.email.toLowerCase() === username.toLowerCase() &&
-            r.password === password &&
-            r.status === "approved",
-        );
-        // Also check API if not found locally (for cross-device sync)
-        if (!found) {
-          try {
-            const apiData = (await apiFetch({ type: "getRecruiters" })) as any;
-            const apiRecruiters = Array.isArray(apiData)
-              ? apiData
-              : apiData?.recruiters || [];
-            found = apiRecruiters.find(
-              (r: {
-                email: string;
-                password: string;
-                status: string;
-                id: string;
-                name: string;
-              }) =>
-                r.email.toLowerCase() === username.toLowerCase() &&
-                r.password === password &&
-                r.status === "approved",
-            );
-          } catch {}
-        }
-        // Also check ICP canister for cross-device approved recruiters
-        if (!found && actor) {
-          try {
-            const approved = await actor.getApprovedRecruiters();
-            const match = approved.find(
-              (r: any) =>
-                r.email.toLowerCase() === username.toLowerCase() &&
-                r.password === password &&
-                r.status === "approved",
-            );
-            if (match) {
-              found = match;
-              // Cache locally so future logins are faster
-              const storedR = localStorage.getItem("crm_recruiters");
-              const recs = storedR ? JSON.parse(storedR) : [];
-              const existingIdx = recs.findIndex(
-                (r: any) => r.email.toLowerCase() === match.email.toLowerCase(),
-              );
-              if (existingIdx >= 0) {
-                recs[existingIdx] = {
-                  ...recs[existingIdx],
-                  status: "approved",
-                  name: match.name,
-                  password: match.password,
-                };
-              } else {
-                recs.push({
-                  id: match.email.toLowerCase(),
-                  name: match.name,
-                  email: match.email,
-                  password: match.password,
-                  status: "approved",
-                  calls: 0,
-                  interested: 0,
-                  notInterested: 0,
-                  followUps: 0,
-                });
-              }
-              localStorage.setItem("crm_recruiters", JSON.stringify(recs));
-            }
-          } catch {}
-        }
-        if (found) {
-          onLoginSuccess({
-            role: "recruiter",
-            id: found.email?.toLowerCase() || found.id,
-            name: found.name,
-            email: found.email,
-          });
-          onNavigate("recruiterDashboard");
-        } else {
-          if (!actor) {
-            // Actor not ready yet — set pending retry so auto-retry kicks in when actor loads
-            setPendingRetry(true);
-            setError("");
-          } else {
-            setError("Invalid credentials or account not yet approved.");
-          }
-        }
-      } else {
-        setError("Invalid credentials. Please try again.");
-      }
-    } finally {
+
+    // Admin login
+    if (
+      selectedRole === "admin" &&
+      username === "UjjwalShakya" &&
+      password === "80907120"
+    ) {
+      onLoginSuccess({
+        role: "admin",
+        id: "admin",
+        name: "Admin",
+        email: "admin@hirevena.com",
+      });
+      onNavigate("adminDashboard");
       setLoading(false);
+      return;
     }
+
+    if (selectedRole !== "recruiter") {
+      setError("Invalid credentials. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Recruiter login
+    const emailLower = username.toLowerCase();
+
+    // Helper: update local cache with canister-verified recruiter
+    const cacheRecruiter = (match: any) => {
+      const storedR = localStorage.getItem("crm_recruiters");
+      const recs = storedR ? JSON.parse(storedR) : [];
+      const idx = recs.findIndex(
+        (r: any) => r.email.toLowerCase() === emailLower,
+      );
+      if (idx >= 0) {
+        recs[idx] = {
+          ...recs[idx],
+          status: "approved",
+          name: match.name,
+          password: match.password,
+        };
+      } else {
+        recs.push({
+          id: emailLower,
+          name: match.name,
+          email: match.email,
+          password: match.password,
+          status: "approved",
+          calls: 0,
+          interested: 0,
+          notInterested: 0,
+          followUps: 0,
+        });
+      }
+      localStorage.setItem("crm_recruiters", JSON.stringify(recs));
+    };
+
+    // Step 1: Check localStorage (fastest, same device)
+    const stored = localStorage.getItem("crm_recruiters");
+    const localRecruiters = stored ? JSON.parse(stored) : [];
+    const localFound = localRecruiters.find(
+      (r: any) =>
+        r.email.toLowerCase() === emailLower &&
+        r.password === password &&
+        r.status === "approved",
+    );
+    if (localFound) {
+      onLoginSuccess({
+        role: "recruiter",
+        id: emailLower,
+        name: localFound.name,
+        email: localFound.email,
+      });
+      onNavigate("recruiterDashboard");
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: Check Google Apps Script API (optional fallback)
+    try {
+      const apiData = (await apiFetch({ type: "getRecruiters" })) as any;
+      const apiRecruiters = Array.isArray(apiData)
+        ? apiData
+        : apiData?.recruiters || [];
+      const apiFound = apiRecruiters.find(
+        (r: any) =>
+          r.email.toLowerCase() === emailLower &&
+          r.password === password &&
+          r.status === "approved",
+      );
+      if (apiFound) {
+        cacheRecruiter(apiFound);
+        onLoginSuccess({
+          role: "recruiter",
+          id: emailLower,
+          name: apiFound.name,
+          email: apiFound.email,
+        });
+        onNavigate("recruiterDashboard");
+        setLoading(false);
+        return;
+      }
+    } catch {}
+
+    // Helper: run canister check against approved recruiters
+    const runCanisterCheck = async (
+      currentActor: typeof actor,
+    ): Promise<any | null> => {
+      try {
+        const approved = await currentActor!.getApprovedRecruiters();
+        return (
+          approved.find(
+            (r: any) =>
+              r.email.toLowerCase() === emailLower &&
+              r.password === password &&
+              r.status === "approved",
+          ) || null
+        );
+      } catch {
+        return null;
+      }
+    };
+
+    // Step 3: Check ICP canister
+    if (actor) {
+      const match = await runCanisterCheck(actor);
+      if (match) {
+        cacheRecruiter(match);
+        onLoginSuccess({
+          role: "recruiter",
+          id: emailLower,
+          name: match.name,
+          email: match.email,
+        });
+        onNavigate("recruiterDashboard");
+      } else {
+        setError("Invalid credentials or account not yet approved.");
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Step 4: Actor not ready yet (mobile cold start) — poll until ready
+    setConnectingMsg("Connecting to server, please wait...");
+    let elapsed = 0;
+    retryIntervalRef.current = setInterval(async () => {
+      elapsed += 1500;
+      const currentActor = actorRef.current;
+      if (!currentActor && elapsed < 30000) return;
+
+      clearInterval(retryIntervalRef.current!);
+      retryIntervalRef.current = null;
+      setConnectingMsg("");
+
+      if (!currentActor) {
+        setError("Server connection timed out. Please refresh and try again.");
+        setLoading(false);
+        return;
+      }
+
+      const match = await runCanisterCheck(currentActor);
+      if (match) {
+        cacheRecruiter(match);
+        onLoginSuccess({
+          role: "recruiter",
+          id: emailLower,
+          name: match.name,
+          email: match.email,
+        });
+        onNavigate("recruiterDashboard");
+      } else {
+        setError("Invalid credentials or account not yet approved.");
+      }
+      setLoading(false);
+    }, 1500);
+    // Note: setLoading(false) is handled inside the interval
   };
 
   const handleSignupSubmit = async () => {
@@ -2154,20 +2216,20 @@ function LoginPage({
                     <X className="w-4 h-4" /> {error}
                   </p>
                 )}
-                {pendingRetry && (
+                {connectingMsg && (
                   <div className="text-sm text-blue-600 flex items-center gap-2 py-2">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    Connecting to server, retrying login...
+                    {connectingMsg}
                   </div>
                 )}
                 <Button
                   data-ocid="login.submit_button"
                   onClick={handleLogin}
-                  disabled={loading || pendingRetry}
+                  disabled={loading}
                   className="w-full h-11 font-semibold text-base mt-2"
                   style={{ background: "oklch(0.55 0.17 245)" }}
                 >
-                  {loading || pendingRetry ? (
+                  {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     "Login"

@@ -266,7 +266,10 @@ function CampaignListView({
       }
 
       // Fallback: Google Apps Script API
-      if (!getApiUrl()) return;
+      if (!getApiUrl()) {
+        setCanisterLoaded(true);
+        return;
+      }
       try {
         const [leadsData, campaignsData] = await Promise.all([
           apiFetch({ type: "leads", recruiter: userEmail }),
@@ -280,6 +283,7 @@ function CampaignListView({
       } catch (e) {
         console.error("API fetch error:", e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 3000);
@@ -510,7 +514,10 @@ function CampaignDetailView({
       }
 
       // Fallback: Google Apps Script API
-      if (!getApiUrl()) return;
+      if (!getApiUrl()) {
+        setCanisterLoaded(true);
+        return;
+      }
       try {
         const data = await apiFetch({
           type: "leads",
@@ -523,6 +530,7 @@ function CampaignDetailView({
       } catch (e) {
         console.error(e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 4000);
@@ -860,7 +868,10 @@ function RecruiterDashboardTab({
         }
       }
       // Fallback: Google Apps Script API
-      if (!recruiterEmail || !getApiUrl()) return;
+      if (!recruiterEmail || !getApiUrl()) {
+        setCanisterLoaded(true);
+        return;
+      }
       try {
         const data = await apiFetch({
           type: "leads",
@@ -873,6 +884,7 @@ function RecruiterDashboardTab({
       } catch (e) {
         console.error(e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 5000);
@@ -1018,6 +1030,7 @@ function MyCandidatesTab({
       } catch (e) {
         console.error(e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 5000);
@@ -1474,6 +1487,7 @@ function FollowUpsTab({
       } catch (e) {
         console.error(e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 5000);
@@ -1645,7 +1659,10 @@ function ActivityTab({
         }
       }
       // Fallback: Google Apps Script API
-      if (!recruiterEmail || !getApiUrl()) return;
+      if (!recruiterEmail || !getApiUrl()) {
+        setCanisterLoaded(true);
+        return;
+      }
       try {
         const data = await apiFetch({
           type: "leads",
@@ -1656,6 +1673,7 @@ function ActivityTab({
       } catch (e) {
         console.error(e);
       }
+      setCanisterLoaded(true);
     };
     load();
     const interval = setInterval(load, 5000);

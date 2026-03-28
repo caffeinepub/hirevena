@@ -79,12 +79,45 @@ actor {
     };
   };
 
+  // ── Stable storage (survives upgrades) ──────────────────────────
+  stable var _submissionEntries : [(Nat, Submission)] = [];
+  stable var _signupRequestEntries : [(Text, SignupRequest)] = [];
+  stable var _campaignEntries : [(Nat, Campaign)] = [];
+  stable var _candidateEntries : [(Text, AssignedCandidate)] = [];
+  stable var _nextId : Nat = 0;
+  stable var _nextCampaignId : Nat = 1;
+
+  // ── Runtime maps (rebuilt from stable on postupgrade) ───────────
   let submissions = Map.empty<Nat, Submission>();
   let signupRequests = Map.empty<Text, SignupRequest>();
-  var nextId = 0;
-  var nextCampaignId = 1;
+  var nextId = _nextId;
+  var nextCampaignId = _nextCampaignId;
   let campaigns = Map.empty<Nat, Campaign>();
   let assignedCandidates = Map.empty<Text, AssignedCandidate>();
+
+  // ── Upgrade hooks ────────────────────────────────────────────────
+  system func preupgrade() {
+    _submissionEntries := submissions.toArray();
+    _signupRequestEntries := signupRequests.toArray();
+    _campaignEntries := campaigns.toArray();
+    _candidateEntries := assignedCandidates.toArray();
+    _nextId := nextId;
+    _nextCampaignId := nextCampaignId;
+  };
+
+  system func postupgrade() {
+    for ((k, v) in _submissionEntries.vals()) { submissions.add(k, v) };
+    for ((k, v) in _signupRequestEntries.vals()) { signupRequests.add(k, v) };
+    for ((k, v) in _campaignEntries.vals()) { campaigns.add(k, v) };
+    for ((k, v) in _candidateEntries.vals()) { assignedCandidates.add(k, v) };
+    nextId := _nextId;
+    nextCampaignId := _nextCampaignId;
+    // Clear stable arrays to free memory
+    _submissionEntries := [];
+    _signupRequestEntries := [];
+    _campaignEntries := [];
+    _candidateEntries := [];
+  };
 
   public shared ({ caller }) func submitSignupRequest(name : Text, email : Text, password : Text) : async () {
     let newRequest : SignupRequest = {
@@ -226,7 +259,7 @@ actor {
     };
   };
 
-  // FIX: status = "" (empty), updatedAt = "" (empty) — never auto-fill
+  // status = "" (empty), updatedAt = "" (empty) — never auto-fill
   public shared ({ caller }) func addAssignedCandidate(id : Text, name : Text, phone : Text, email : Text, skills : Text, assignedTo : Text, campaign : Text, batchId : Text, assignDate : Text) : async Bool {
     let candidate : AssignedCandidate = {
       id;
@@ -236,16 +269,16 @@ actor {
       skills;
       assignedTo = assignedTo.toLower();
       campaign;
-      status = "";       // FIXED: always empty on assign
+      status = "";       // always empty on assign
       batchId;
       assignDate;
-      updatedAt = "";    // FIXED: empty until recruiter submits response
+      updatedAt = "";    // empty until recruiter submits response
     };
     assignedCandidates.add(id, candidate);
     true;
   };
 
-  // FIX: exact email match (toLower comparison) instead of substring contains
+  // exact email match (toLower comparison)
   public query ({ caller }) func getAssignedCandidates(recruiterEmail : Text, campaign : Text) : async [AssignedCandidate] {
     let emailLower = recruiterEmail.trim(#char(' ')).toLower();
     assignedCandidates.toArray().filter(
@@ -261,7 +294,7 @@ actor {
     array.sort();
   };
 
-  // FIX: update status + updatedAt only when recruiter explicitly acts
+  // update status + updatedAt only when recruiter explicitly acts
   public shared ({ caller }) func updateCandidateStatus(id : Text, status : Text, updatedAt : Text) : async Bool {
     switch (assignedCandidates.get(id)) {
       case (null) { false };

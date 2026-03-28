@@ -172,8 +172,11 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const storedVersion = localStorage.getItem("crm_version");
     if (storedVersion !== STORAGE_VERSION) {
+      // Preserve session across version bumps so recruiters stay logged in
+      const savedSession = localStorage.getItem("crm_session");
       localStorage.clear();
       localStorage.setItem("crm_version", STORAGE_VERSION);
+      if (savedSession) localStorage.setItem("crm_session", savedSession);
     }
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
@@ -490,21 +493,39 @@ export function useCRMState() {
         id: genId("SR"),
         requestedAt: new Date().toISOString().split("T")[0],
       };
-      setSignupRequests((prev) => [...prev, newReq]);
-      setRecruiters((prev) => [
-        ...prev,
-        {
-          id: newReq.id,
-          name: req.name,
-          email: req.email,
-          password: req.password,
-          status: "pending",
-          calls: 0,
-          interested: 0,
-          notInterested: 0,
-          followUps: 0,
-        },
-      ]);
+      setSignupRequests((prev) => {
+        // Don't add duplicate requests for same email
+        if (prev.some((s) => s.email.toLowerCase() === req.email.toLowerCase()))
+          return prev;
+        return [...prev, newReq];
+      });
+      setRecruiters((prev) => {
+        // Don't create duplicate recruiter entries; just update password if changed
+        const existing = prev.find(
+          (r) => r.email.toLowerCase() === req.email.toLowerCase(),
+        );
+        if (existing) {
+          return prev.map((r) =>
+            r.email.toLowerCase() === req.email.toLowerCase()
+              ? { ...r, password: req.password || r.password }
+              : r,
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: newReq.id,
+            name: req.name,
+            email: req.email,
+            password: req.password,
+            status: "pending" as RecruiterStatus,
+            calls: 0,
+            interested: 0,
+            notInterested: 0,
+            followUps: 0,
+          },
+        ];
+      });
     },
     updateCRMConfig: (config) => {
       setCrmConfig(config);
