@@ -166,7 +166,7 @@ const SEED_SIGNUP_REQUESTS: SignupRequest[] = [];
 const SEED_CAMPAIGNS: Campaign[] = [];
 
 // Bump version to clear old stale data (duplicate IDs from previous bug)
-const STORAGE_VERSION = "v9_isoTimestamps";
+const STORAGE_VERSION = "v10_canisterSync";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {

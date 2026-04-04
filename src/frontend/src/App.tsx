@@ -2346,6 +2346,53 @@ function HomeLayout({ onLogin }: { onLogin: () => void }) {
 // ─── App ─────────────────────────────────────────────────────────
 export default function App() {
   const crmStore = useCRMState();
+  const { actor } = useActor();
+
+  // On startup: sync canister-approved recruiters into localStorage
+  // so login works cross-device without needing to open admin panel first
+  useEffect(() => {
+    if (!actor) return;
+    actor
+      .getApprovedRecruiters()
+      .then((approved: any[]) => {
+        const stored = localStorage.getItem("crm_recruiters");
+        const local: any[] = stored ? JSON.parse(stored) : [];
+        let changed = false;
+        for (const r of approved) {
+          const emailLower = r.email.toLowerCase();
+          const idx = local.findIndex(
+            (x: any) => x.email.toLowerCase() === emailLower,
+          );
+          if (idx < 0) {
+            local.push({
+              id: emailLower,
+              name: r.name,
+              email: r.email,
+              password: r.password,
+              status: "approved",
+              calls: 0,
+              interested: 0,
+              notInterested: 0,
+              followUps: 0,
+            });
+            changed = true;
+          } else if (local[idx].status !== "approved") {
+            local[idx] = {
+              ...local[idx],
+              status: "approved",
+              name: r.name,
+              password: r.password,
+            };
+            changed = true;
+          }
+        }
+        if (changed) {
+          localStorage.setItem("crm_recruiters", JSON.stringify(local));
+        }
+      })
+      .catch(() => {});
+  }, [actor]);
+
   const [currentPage, setCurrentPage] = useState<PageType>(() => {
     const session = localStorage.getItem("crm_session");
     if (session) {
