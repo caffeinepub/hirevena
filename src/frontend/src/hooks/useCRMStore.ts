@@ -170,13 +170,10 @@ const STORAGE_VERSION = "v10_canisterSync";
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
+    // Just mark the version without wiping data - preserve all existing data
     const storedVersion = localStorage.getItem("crm_version");
     if (storedVersion !== STORAGE_VERSION) {
-      // Preserve session across version bumps so recruiters stay logged in
-      const savedSession = localStorage.getItem("crm_session");
-      localStorage.clear();
       localStorage.setItem("crm_version", STORAGE_VERSION);
-      if (savedSession) localStorage.setItem("crm_session", savedSession);
     }
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
@@ -287,9 +284,18 @@ export function useCRMStore(): CRMStore {
 export { CRMContext };
 
 export function useCRMState() {
-  const [recruiters, setRecruiters] = useState<Recruiter[]>(() =>
-    loadFromStorage("crm_recruiters", SEED_RECRUITERS),
-  );
+  const [recruiters, setRecruiters] = useState<Recruiter[]>(() => {
+    const stored: Recruiter[] = loadFromStorage("crm_recruiters", []);
+    // Always ensure seed recruiters exist (merge by email, never remove existing data)
+    const merged = [...stored];
+    for (const seed of SEED_RECRUITERS) {
+      const exists = merged.some(
+        (r) => r.email.toLowerCase() === seed.email.toLowerCase(),
+      );
+      if (!exists) merged.push(seed);
+    }
+    return merged.length > 0 ? merged : SEED_RECRUITERS;
+  });
   const [candidates, setCandidates] = useState<Candidate[]>(() =>
     loadFromStorage("crm_candidates", SEED_CANDIDATES),
   );
