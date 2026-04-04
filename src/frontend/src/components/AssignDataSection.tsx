@@ -762,6 +762,84 @@ export default function AssignDataSection() {
     }
   };
 
+  const exportCampaignCSV = (campaignName: string) => {
+    const liveCandidates =
+      canisterCandidates.length > 0 ? canisterCandidates : store.candidates;
+    const campaignCandidates = liveCandidates.filter(
+      (c: any) =>
+        (c.campaign || "").toLowerCase() === campaignName.toLowerCase(),
+    );
+    if (campaignCandidates.length === 0) {
+      alert("No candidate data found for this campaign.");
+      return;
+    }
+    const campaign = store.campaigns.find(
+      (cp) => cp.campaignName.toLowerCase() === campaignName.toLowerCase(),
+    );
+    let csv = `Campaign Name,Company,Role,Location,Salary\n${campaign?.campaignName || campaignName},${campaign?.companyName || ""},${campaign?.role || ""},${campaign?.location || ""},${campaign?.salary || ""}\n\n`;
+    csv +=
+      "Candidate Name,Phone,Email,Skills,Assigned To (Recruiter),Status,Remarks/Notes,Last Updated,Batch ID,Assign Date\n";
+    for (const c of campaignCandidates as any[]) {
+      const recruiterName =
+        store.recruiters.find(
+          (r) =>
+            r.email?.toLowerCase() === (c.assignedTo || "").toLowerCase() ||
+            r.id === c.assignedRecruiter,
+        )?.name ||
+        c.assignedTo ||
+        "";
+      const status =
+        !c.status || c.status === "" || c.status === "Assigned"
+          ? "Pending"
+          : c.status;
+      const name = `"${(c.name || "").replace(/"/g, '""')}"`;
+      const notes = `"${(c.notes || c.remarks || "").replace(/"/g, '""')}"`;
+      csv += `${name},${c.phone || ""},${c.email || ""},${c.skills || ""},${recruiterName},${status},${notes},${c.updatedAt || ""},${c.batchId || ""},${c.assignDate || ""}\n`;
+    }
+    const total = campaignCandidates.length;
+    const calls = (campaignCandidates as any[]).filter(
+      (c: any) => c.updatedAt && c.updatedAt !== "",
+    ).length;
+    const interested = (campaignCandidates as any[]).filter(
+      (c: any) => c.status === "Interested",
+    ).length;
+    const notInterested = (campaignCandidates as any[]).filter(
+      (c: any) => c.status === "Not Interested",
+    ).length;
+    const pending = total - calls;
+    csv += `\nSUMMARY\nTotal Assigned,${total}\nCalls Done,${calls}\nInterested,${interested}\nNot Interested,${notInterested}\nPending,${pending}\nConversion %,${total > 0 ? Math.round((interested / total) * 100) : 0}%\n`;
+    // Recruiter-wise breakdown
+    const recruiterMap: Record<
+      string,
+      { assigned: number; calls: number; interested: number }
+    > = {};
+    for (const c of campaignCandidates as any[]) {
+      const rKey =
+        store.recruiters.find(
+          (r) =>
+            r.email?.toLowerCase() === (c.assignedTo || "").toLowerCase() ||
+            r.id === c.assignedRecruiter,
+        )?.name ||
+        c.assignedTo ||
+        "Unknown";
+      if (!recruiterMap[rKey])
+        recruiterMap[rKey] = { assigned: 0, calls: 0, interested: 0 };
+      recruiterMap[rKey].assigned++;
+      if ((c as any).updatedAt && (c as any).updatedAt !== "")
+        recruiterMap[rKey].calls++;
+      if ((c as any).status === "Interested") recruiterMap[rKey].interested++;
+    }
+    csv +=
+      "\nRECRUITER-WISE BREAKDOWN\nRecruiter,Total Assigned,Calls Done,Interested,Conversion%\n";
+    for (const [rName, rs] of Object.entries(recruiterMap)) {
+      const conv =
+        rs.assigned > 0 ? Math.round((rs.interested / rs.assigned) * 100) : 0;
+      csv += `${rName},${rs.assigned},${rs.calls},${rs.interested},${conv}%\n`;
+    }
+    const safeFileName = campaignName.replace(/[^a-z0-9]/gi, "_");
+    downloadCSV(csv, `Campaign_${safeFileName}_Export.csv`);
+  };
+
   // Filtered batches for tracking tab
   const filteredBatches = campaignFilter
     ? store.batches.filter((b) => b.campaign === campaignFilter)
@@ -977,8 +1055,19 @@ export default function AssignDataSection() {
                             </span>
                           </div>
                         )}
-                        {/* Delete button */}
-                        <div className="mt-3 pt-2 flex justify-end">
+                        {/* Action buttons */}
+                        <div className="mt-3 pt-2 flex justify-between items-center gap-2">
+                          <button
+                            type="button"
+                            data-ocid="assign.campaign.export_button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportCampaignCSV(campaign.campaignName);
+                            }}
+                            className="text-xs px-2 py-1 rounded text-blue-600 hover:bg-blue-50 border border-blue-200 hover:border-blue-400 transition-colors font-medium flex items-center gap-1"
+                          >
+                            <Download className="w-3 h-3" /> Export Campaign
+                          </button>
                           <button
                             type="button"
                             data-ocid="assign.campaign.delete_button"
@@ -1302,10 +1391,23 @@ export default function AssignDataSection() {
               <BarChart3 className="w-4 h-4 inline mr-1" />
               Live Batch Analytics
             </h3>
-            <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              Auto-refresh
-            </span>
+            <div className="flex items-center gap-2">
+              {campaignFilter && (
+                <button
+                  type="button"
+                  data-ocid="tracking.export_campaign.button"
+                  onClick={() => exportCampaignCSV(campaignFilter)}
+                  className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-white font-medium shadow-sm hover:opacity-90 transition-opacity"
+                  style={{ background: "oklch(0.55 0.17 245)" }}
+                >
+                  <Download className="w-3 h-3" /> Export Campaign
+                </button>
+              )}
+              <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                Auto-refresh
+              </span>
+            </div>
           </div>
 
           {/* Campaign Filter */}
