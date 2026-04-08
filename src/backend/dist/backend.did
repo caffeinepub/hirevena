@@ -1,0 +1,93 @@
+type Time = int;
+type Submission = 
+ record {
+   companyName: text;
+   contactName: text;
+   emailAddress: text;
+   followUpDate: text;
+   id: nat;
+   notes: text;
+   phoneNumber: text;
+   positions: text;
+   role: text;
+   status: text;
+   timestamp: Time;
+   urgency: text;
+ };
+type SignupRequest = 
+ record {
+   email: text;
+   name: text;
+   password: text;
+   requestedAt: Time;
+   status: text;
+ };
+type Client = 
+ record {
+   activeRoles: text;
+   companyName: text;
+   contactName: text;
+   createdAt: text;
+   email: text;
+   id: text;
+   location: text;
+   notes: text;
+   phone: text;
+ };
+type Campaign = 
+ record {
+   campaignName: text;
+   companyName: text;
+   createdAt: text;
+   id: nat;
+   location: text;
+   role: text;
+   salary: text;
+ };
+type AssignedCandidate = 
+ record {
+   assignDate: text;
+   assignedTo: text;
+   batchId: text;
+   campaign: text;
+   email: text;
+   id: text;
+   name: text;
+   phone: text;
+   skills: text;
+   status: text;
+   updatedAt: text;
+ };
+service : {
+  addAssignedCandidate: (id: text, name: text, phone: text, email: text,
+   skills: text, assignedTo: text, campaign: text, batchId: text, assignDate:
+   text) -> (bool);
+  approveSignupRequest: (email: text) -> (bool);
+  createCampaign: (campaignName: text, companyName: text, role: text,
+   location: text, salary: text) -> (nat);
+  createClient: (id: text, companyName: text, contactName: text, phone: 
+   text, email: text, location: text, activeRoles: text, notes: text,
+   createdAt: text) -> (text);
+  createSubmission: (companyName: text, contactName: text, phoneNumber: 
+   text, emailAddress: text, role: text, positions: text, urgency: text) ->
+   ();
+  deleteCampaign: (id: nat) -> (bool);
+  deleteClient: (id: text) -> (text);
+  deleteSubmission: (id: nat) -> (bool);
+  getAllAssignedCandidates: () -> (vec AssignedCandidate) query;
+  getAllClients: () -> (vec Client) query;
+  getAllSubmissions: () -> (vec Submission) query;
+  getApprovedRecruiters: () -> (vec SignupRequest) query;
+  getAssignedCandidates: (recruiterEmail: text, campaign: text) ->
+   (vec AssignedCandidate) query;
+  getCampaigns: () -> (vec Campaign) query;
+  getSignupRequests: () -> (vec SignupRequest) query;
+  rejectSignupRequest: (email: text) -> (bool);
+  submitSignupRequest: (name: text, email: text, password: text) -> ();
+  updateCandidateStatus: (id: text, status: text, updatedAt: text) -> (bool);
+  updateClient: (id: text, companyName: text, contactName: text, phone: 
+   text, email: text, location: text, activeRoles: text, notes: text) ->
+   (text);
+  updateLead: (id: nat, status: text, notes: text, followUpDate: text) ->
+   (bool);
+}

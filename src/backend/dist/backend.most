@@ -1,0 +1,109 @@
+// Version: 1.0.0
+type AssignedCandidate__33702204 =
+  {
+    assignDate : Text;
+    assignedTo : Text;
+    batchId : Text;
+    campaign : Text;
+    email : Text;
+    id : Text;
+    name : Text;
+    phone : Text;
+    skills : Text;
+    status : Text;
+    updatedAt : Text
+  };
+type Campaign__370329394 =
+  {
+    campaignName : Text;
+    companyName : Text;
+    createdAt : Text;
+    id : Nat;
+    location : Text;
+    role : Text;
+    salary : Text
+  };
+type Client__171211559 =
+  {
+    activeRoles : Text;
+    companyName : Text;
+    contactName : Text;
+    createdAt : Text;
+    email : Text;
+    id : Text;
+    location : Text;
+    notes : Text;
+    phone : Text
+  };
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type Int__270357528 = Int__616954475;
+type Int__616954475 = Int;
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type SignupRequest__1045806937 =
+  {
+    email : Text;
+    name : Text;
+    password : Text;
+    requestedAt : Time__900049286;
+    status : Text
+  };
+type Submission__688246233 =
+  {
+    companyName : Text;
+    contactName : Text;
+    emailAddress : Text;
+    followUpDate : Text;
+    id : Nat;
+    notes : Text;
+    phoneNumber : Text;
+    positions : Text;
+    role : Text;
+    status : Text;
+    timestamp : Time__900049286;
+    urgency : Text
+  };
+type Time__796480547 = Int__270357528;
+type Time__900049286 = Time__796480547;
+actor {
+  stable var _campaignEntries : [(Nat, Campaign__370329394)];
+  stable var _candidateEntries : [(Text, AssignedCandidate__33702204)];
+  stable var _clientEntries : [(Text, Client__171211559)];
+  stable var _nextCampaignId : Nat;
+  stable var _nextId : Nat;
+  stable var _signupRequestEntries : [(Text, SignupRequest__1045806937)];
+  stable var _submissionEntries : [(Nat, Submission__688246233)];
+  stable assignedCandidates :
+    {
+      var root : Node__46230540<Text, AssignedCandidate__33702204>;
+      var size : Nat__490723111
+    };
+  stable campaigns :
+    {
+      var root : Node__46230540<Nat, Campaign__370329394>;
+      var size : Nat__490723111
+    };
+  stable clients :
+    {
+      var root : Node__46230540<Text, Client__171211559>;
+      var size : Nat__490723111
+    };
+  stable var nextCampaignId : Nat;
+  stable var nextId : Nat;
+  stable signupRequests :
+    {
+      var root : Node__46230540<Text, SignupRequest__1045806937>;
+      var size : Nat__490723111
+    };
+  stable submissions :
+    {
+      var root : Node__46230540<Nat, Submission__688246233>;
+      var size : Nat__490723111
+    }
+};

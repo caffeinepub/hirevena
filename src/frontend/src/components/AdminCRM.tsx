@@ -275,7 +275,15 @@ function DashboardSection() {
   const { actor } = useActor();
   const [canisterCandidates, setCanisterCandidates] = useState<any[]>([]);
   const [canisterLoaded, setCanisterLoaded] = useState(false);
+  const [slowServer, setSlowServer] = useState(false);
   const today = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    const slowTimer = setTimeout(() => {
+      if (!canisterLoaded) setSlowServer(true);
+    }, 12000);
+    return () => clearTimeout(slowTimer);
+  }, [canisterLoaded]);
 
   useEffect(() => {
     const load = async () => {
@@ -284,6 +292,7 @@ function DashboardSection() {
         const all = await actor.getAllAssignedCandidates();
         setCanisterCandidates(all as any[]);
         setCanisterLoaded(true);
+        setSlowServer(false);
       } catch (e) {
         console.error("Admin dashboard canister fetch error:", e);
       }
@@ -298,11 +307,7 @@ function DashboardSection() {
   }, [actor]);
 
   // Use canisterCandidates if available, else fall back to store.candidates
-  const allCandidates = canisterLoaded
-    ? canisterCandidates
-    : canisterCandidates.length > 0
-      ? canisterCandidates
-      : candidates;
+  const allCandidates = canisterLoaded ? canisterCandidates : candidates;
 
   const todayISO = new Date().toISOString().split("T")[0];
   const callsToday = allCandidates.filter((c: any) =>
@@ -390,6 +395,12 @@ function DashboardSection() {
 
   return (
     <div className="space-y-6">
+      {slowServer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-700 flex items-center gap-2">
+          <span>⚠️</span>
+          <span>Server is taking longer than usual. Showing cached data.</span>
+        </div>
+      )}
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Calls Today" value={callsToday} />
@@ -1544,17 +1555,78 @@ function CandidatesSection() {
 // ── Clients ────────────────────────────────────────────────────────
 function ClientsSection() {
   const store = useCRMStore();
+  const { actor } = useActor();
   const [showModal, setShowModal] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [canisterClients, setCanisterClients] = useState<Client[]>([]);
+  const [canisterLoaded, setCanisterLoaded] = useState(false);
   const emptyForm = {
     name: "",
     contactPerson: "",
     phone: "",
     email: "",
+    location: "",
     activeRoles: "",
     notes: "",
   };
   const [form, setForm] = useState(emptyForm);
+
+  // Load clients from canister on mount and merge into store
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    const load = async () => {
+      if (!actor) return;
+      try {
+        const all = await actor.getAllClients();
+        // Map canister Client (companyName/contactName) → store Client (name/contactPerson)
+        const mapped: Client[] = (
+          all as Array<{
+            id: string;
+            companyName: string;
+            contactName: string;
+            phone: string;
+            email: string;
+            location: string;
+            activeRoles: string;
+            notes: string;
+            createdAt: string;
+          }>
+        ).map((c) => ({
+          id: c.id,
+          name: c.companyName,
+          contactPerson: c.contactName,
+          phone: c.phone,
+          email: c.email,
+          location: c.location,
+          activeRoles: c.activeRoles,
+          notes: c.notes,
+        }));
+        setCanisterClients(mapped);
+        setCanisterLoaded(true);
+        // Merge into store so localStorage stays in sync as fallback
+        for (const cc of mapped) {
+          const existing = store.clients.find((sc) => sc.id === cc.id);
+          if (!existing) {
+            store.addClient({
+              name: cc.name,
+              contactPerson: cc.contactPerson,
+              phone: cc.phone,
+              email: cc.email,
+              location: cc.location,
+              activeRoles: cc.activeRoles,
+              notes: cc.notes,
+            });
+          }
+        }
+      } catch {
+        // Canister unavailable — localStorage fallback remains active
+      }
+    };
+    load();
+  }, [actor]);
+
+  // Prefer canister data when loaded, fall back to localStorage store
+  const displayClients = canisterLoaded ? canisterClients : store.clients;
 
   const openAdd = () => {
     setEditClient(null);
@@ -1568,10 +1640,101 @@ function ClientsSection() {
       contactPerson: c.contactPerson,
       phone: c.phone,
       email: c.email,
+      location: c.location || "",
       activeRoles: c.activeRoles,
       notes: c.notes,
     });
     setShowModal(true);
+  };
+
+  const handleDelete = async (c: Client) => {
+    // Optimistic local removal
+    store.deleteClient(c.id);
+    setCanisterClients((prev) => prev.filter((x) => x.id !== c.id));
+    // Sync to canister
+    if (actor) {
+      try {
+        await actor.deleteClient(c.id);
+      } catch {
+        // Ignore — local removal already done
+      }
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name) return;
+    const now = new Date().toISOString();
+    if (editClient) {
+      // Update locally
+      store.updateClient(editClient.id, form);
+      setCanisterClients((prev) =>
+        prev.map((x) =>
+          x.id === editClient.id
+            ? {
+                ...x,
+                name: form.name,
+                contactPerson: form.contactPerson,
+                phone: form.phone,
+                email: form.email,
+                location: form.location,
+                activeRoles: form.activeRoles,
+                notes: form.notes,
+              }
+            : x,
+        ),
+      );
+      // Sync to canister
+      if (actor) {
+        try {
+          await actor.updateClient(
+            editClient.id,
+            form.name,
+            form.contactPerson,
+            form.phone,
+            form.email,
+            form.location,
+            form.activeRoles,
+            form.notes,
+          );
+        } catch {
+          // Ignore — local update already done
+        }
+      }
+    } else {
+      const newId = `CLI_${Date.now()}`;
+      // Add locally first
+      store.addClient(form);
+      const newClient: Client = {
+        id: newId,
+        name: form.name,
+        contactPerson: form.contactPerson,
+        phone: form.phone,
+        email: form.email,
+        location: form.location,
+        activeRoles: form.activeRoles,
+        notes: form.notes,
+      };
+      setCanisterClients((prev) => [...prev, newClient]);
+      // Sync to canister
+      if (actor) {
+        try {
+          await actor.createClient(
+            newId,
+            form.name,
+            form.contactPerson,
+            form.phone,
+            form.email,
+            form.location,
+            form.activeRoles,
+            form.notes,
+            now,
+          );
+        } catch {
+          // Ignore — local add already done
+        }
+      }
+    }
+    setShowModal(false);
   };
 
   return (
@@ -1588,7 +1751,7 @@ function ClientsSection() {
         </Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {store.clients.map((c, i) => (
+        {displayClients.map((c, i) => (
           <div
             key={c.id}
             data-ocid={`clients.item.${i + 1}`}
@@ -1604,19 +1767,33 @@ function ClientsSection() {
                 </h3>
                 <p className="text-xs text-foreground/50">{c.contactPerson}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                data-ocid={`clients.edit_button.${i + 1}`}
-                onClick={() => openEdit(c)}
-                className="h-7 text-xs"
-              >
-                Edit
-              </Button>
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-ocid={`clients.edit_button.${i + 1}`}
+                  onClick={() => openEdit(c)}
+                  className="h-7 text-xs"
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-ocid={`clients.delete_button.${i + 1}`}
+                  onClick={() => handleDelete(c)}
+                  className="h-7 text-xs border-red-200 text-red-500 hover:bg-red-50"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-1 text-sm">
               <p className="text-foreground/70">📞 {c.phone}</p>
               <p className="text-foreground/70">✉️ {c.email}</p>
+              {c.location && (
+                <p className="text-foreground/70">📍 {c.location}</p>
+              )}
               <p className="text-foreground/70">
                 <span className="font-medium">Roles:</span> {c.activeRoles}
               </p>
@@ -1626,6 +1803,15 @@ function ClientsSection() {
             </div>
           </div>
         ))}
+        {displayClients.length === 0 && (
+          <div
+            data-ocid="clients.empty_state"
+            className="col-span-2 bg-white rounded-xl border border-border p-8 text-center text-foreground/40"
+          >
+            <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            No clients yet. Add your first client.
+          </div>
+        )}
       </div>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
@@ -1676,6 +1862,16 @@ function ClientsSection() {
               </div>
             </div>
             <div>
+              <Label>Location</Label>
+              <Input
+                value={form.location}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, location: e.target.value }))
+                }
+                placeholder="City, State"
+              />
+            </div>
+            <div>
               <Label>Active Roles</Label>
               <Input
                 value={form.activeRoles}
@@ -1705,12 +1901,7 @@ function ClientsSection() {
             </Button>
             <Button
               data-ocid="clients.submit_button"
-              onClick={() => {
-                if (!form.name) return;
-                if (editClient) store.updateClient(editClient.id, form);
-                else store.addClient(form);
-                setShowModal(false);
-              }}
+              onClick={handleSubmit}
               style={{ background: "oklch(0.55 0.17 245)" }}
             >
               {editClient ? "Save" : "Add"}
@@ -1986,7 +2177,21 @@ function LogsSection() {
                 className={i % 2 === 0 ? "" : "bg-muted/30"}
               >
                 <td className="px-4 py-2.5 text-foreground/60 whitespace-nowrap">
-                  {l.timestamp}
+                  {l.timestamp
+                    ? (() => {
+                        try {
+                          return new Date(l.timestamp).toLocaleString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+                        } catch {
+                          return l.timestamp;
+                        }
+                      })()
+                    : "—"}
                 </td>
                 <td className="px-4 py-2.5 font-medium">{l.recruiterName}</td>
                 <td className="px-4 py-2.5">{l.action}</td>

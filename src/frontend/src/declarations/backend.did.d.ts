@@ -32,6 +32,17 @@ export interface Campaign {
   'campaignName' : string,
   'location' : string,
 }
+export interface Client {
+  'id' : string,
+  'contactName' : string,
+  'activeRoles' : string,
+  'createdAt' : string,
+  'email' : string,
+  'notes' : string,
+  'companyName' : string,
+  'phone' : string,
+  'location' : string,
+}
 export interface SignupRequest {
   'status' : string,
   'password' : string,
@@ -64,12 +75,19 @@ export interface _SERVICE {
     [string, string, string, string, string],
     bigint
   >,
+  'createClient' : ActorMethod<
+    [string, string, string, string, string, string, string, string, string],
+    string
+  >,
   'createSubmission' : ActorMethod<
     [string, string, string, string, string, string, string],
     undefined
   >,
+  'deleteCampaign' : ActorMethod<[bigint], boolean>,
+  'deleteClient' : ActorMethod<[string], string>,
   'deleteSubmission' : ActorMethod<[bigint], boolean>,
   'getAllAssignedCandidates' : ActorMethod<[], Array<AssignedCandidate>>,
+  'getAllClients' : ActorMethod<[], Array<Client>>,
   'getAllSubmissions' : ActorMethod<[], Array<Submission>>,
   'getApprovedRecruiters' : ActorMethod<[], Array<SignupRequest>>,
   'getAssignedCandidates' : ActorMethod<
@@ -81,6 +99,10 @@ export interface _SERVICE {
   'rejectSignupRequest' : ActorMethod<[string], boolean>,
   'submitSignupRequest' : ActorMethod<[string, string, string], undefined>,
   'updateCandidateStatus' : ActorMethod<[string, string, string], boolean>,
+  'updateClient' : ActorMethod<
+    [string, string, string, string, string, string, string, string],
+    string
+  >,
   'updateLead' : ActorMethod<[bigint, string, string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;

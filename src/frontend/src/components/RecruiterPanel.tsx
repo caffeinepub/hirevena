@@ -229,8 +229,16 @@ function CampaignListView({
   >([]);
   const [apiCampaigns, setApiCampaigns] = useState<Campaign[]>([]);
   const [canisterLoaded, setCanisterLoaded] = useState(false);
+  const [slowServer, setSlowServer] = useState(false);
 
   const { actor } = useActor();
+
+  useEffect(() => {
+    const slowTimer = setTimeout(() => {
+      if (!canisterLoaded) setSlowServer(true);
+    }, 12000);
+    return () => clearTimeout(slowTimer);
+  }, [canisterLoaded]);
 
   useEffect(() => {
     const load = async () => {
@@ -362,6 +370,13 @@ function CampaignListView({
       >
         🎯 My Campaigns
       </h1>
+
+      {slowServer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-700 flex items-center gap-2">
+          <span>⚠️</span>
+          <span>Server is taking longer than usual. Showing cached data.</span>
+        </div>
+      )}
 
       {!canisterLoaded && myCampaigns.length === 0 ? (
         <div
@@ -846,8 +861,16 @@ function RecruiterDashboardTab({
     import("../hooks/useCRMStore").Candidate[]
   >([]);
   const [canisterLoaded, setCanisterLoaded] = useState(false);
+  const [slowServer, setSlowServer] = useState(false);
 
   const { actor } = useActor();
+
+  useEffect(() => {
+    const slowTimer = setTimeout(() => {
+      if (!canisterLoaded) setSlowServer(true);
+    }, 12000);
+    return () => clearTimeout(slowTimer);
+  }, [canisterLoaded]);
 
   useEffect(() => {
     const load = async () => {
@@ -925,6 +948,12 @@ function RecruiterDashboardTab({
 
   return (
     <div className="space-y-4">
+      {slowServer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-700 flex items-center gap-2">
+          <span>⚠️</span>
+          <span>Server is taking longer than usual. Showing cached data.</span>
+        </div>
+      )}
       <h1
         className="font-bold text-lg"
         style={{ color: "oklch(0.28 0.085 245)" }}
@@ -964,7 +993,24 @@ function RecruiterDashboardTab({
                 <div>
                   <p className="font-medium">{l.action}</p>
                   <p className="text-xs text-foreground/50">
-                    {l.details} · {l.timestamp}
+                    {l.details} ·{" "}
+                    {l.timestamp
+                      ? (() => {
+                          try {
+                            return new Date(l.timestamp).toLocaleString(
+                              "en-IN",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            );
+                          } catch {
+                            return l.timestamp;
+                          }
+                        })()
+                      : ""}
                   </p>
                 </div>
               </div>
@@ -1835,7 +1881,20 @@ function ActivityTab({
                 className={i % 2 === 0 ? "" : "bg-muted/30"}
               >
                 <td className="px-4 py-2 text-xs text-foreground/50 whitespace-nowrap">
-                  {l.timestamp}
+                  {l.timestamp
+                    ? (() => {
+                        try {
+                          return new Date(l.timestamp).toLocaleString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          });
+                        } catch {
+                          return l.timestamp;
+                        }
+                      })()
+                    : "—"}
                 </td>
                 <td className="px-4 py-2">{l.action}</td>
                 <td className="px-4 py-2 text-foreground/60 text-xs">

@@ -80,10 +80,23 @@ actor {
   };
 
   // ── Stable storage (survives upgrades) ──────────────────────────
+  type Client = {
+    id : Text;
+    companyName : Text;
+    contactName : Text;
+    phone : Text;
+    email : Text;
+    location : Text;
+    activeRoles : Text;
+    notes : Text;
+    createdAt : Text;
+  };
+
   stable var _submissionEntries : [(Nat, Submission)] = [];
   stable var _signupRequestEntries : [(Text, SignupRequest)] = [];
   stable var _campaignEntries : [(Nat, Campaign)] = [];
   stable var _candidateEntries : [(Text, AssignedCandidate)] = [];
+  stable var _clientEntries : [(Text, Client)] = [];
   stable var _nextId : Nat = 0;
   stable var _nextCampaignId : Nat = 1;
 
@@ -94,6 +107,7 @@ actor {
   var nextCampaignId = _nextCampaignId;
   let campaigns = Map.empty<Nat, Campaign>();
   let assignedCandidates = Map.empty<Text, AssignedCandidate>();
+  let clients = Map.empty<Text, Client>();
 
   // ── Upgrade hooks ────────────────────────────────────────────────
   system func preupgrade() {
@@ -101,6 +115,7 @@ actor {
     _signupRequestEntries := signupRequests.toArray();
     _campaignEntries := campaigns.toArray();
     _candidateEntries := assignedCandidates.toArray();
+    _clientEntries := clients.toArray();
     _nextId := nextId;
     _nextCampaignId := nextCampaignId;
   };
@@ -110,6 +125,7 @@ actor {
     for ((k, v) in _signupRequestEntries.vals()) { signupRequests.add(k, v) };
     for ((k, v) in _campaignEntries.vals()) { campaigns.add(k, v) };
     for ((k, v) in _candidateEntries.vals()) { assignedCandidates.add(k, v) };
+    for ((k, v) in _clientEntries.vals()) { clients.add(k, v) };
     nextId := _nextId;
     nextCampaignId := _nextCampaignId;
     // Clear stable arrays to free memory
@@ -117,6 +133,7 @@ actor {
     _signupRequestEntries := [];
     _campaignEntries := [];
     _candidateEntries := [];
+    _clientEntries := [];
   };
 
   public shared ({ caller }) func submitSignupRequest(name : Text, email : Text, password : Text) : async () {
@@ -313,5 +330,74 @@ actor {
   public query ({ caller }) func getCampaigns() : async [Campaign] {
     let array = campaigns.values().toArray();
     array.sort();
+  };
+
+  // ── Clients ──────────────────────────────────────────────────────
+  public shared ({ caller }) func createClient(
+    id : Text,
+    companyName : Text,
+    contactName : Text,
+    phone : Text,
+    email : Text,
+    location : Text,
+    activeRoles : Text,
+    notes : Text,
+    createdAt : Text,
+  ) : async Text {
+    let client : Client = {
+      id;
+      companyName;
+      contactName;
+      phone;
+      email;
+      location;
+      activeRoles;
+      notes;
+      createdAt;
+    };
+    clients.add(id, client);
+    id;
+  };
+
+  public shared ({ caller }) func updateClient(
+    id : Text,
+    companyName : Text,
+    contactName : Text,
+    phone : Text,
+    email : Text,
+    location : Text,
+    activeRoles : Text,
+    notes : Text,
+  ) : async Text {
+    switch (clients.get(id)) {
+      case (null) { "not_found" };
+      case (?existing) {
+        let updated : Client = {
+          existing with
+          companyName;
+          contactName;
+          phone;
+          email;
+          location;
+          activeRoles;
+          notes;
+        };
+        clients.add(id, updated);
+        id;
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteClient(id : Text) : async Text {
+    if (clients.containsKey(id)) {
+      clients.remove(id);
+      "deleted";
+    } else {
+      "not_found";
+    };
+  };
+
+  public query ({ caller }) func getAllClients() : async [Client] {
+    clients.values().toArray();
   };
 };

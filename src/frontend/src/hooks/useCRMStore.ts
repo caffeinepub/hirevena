@@ -68,6 +68,7 @@ export interface Client {
   contactPerson: string;
   phone: string;
   email: string;
+  location: string;
   activeRoles: string;
   notes: string;
 }
@@ -262,6 +263,7 @@ interface CRMStore {
   rejectRecruiter: (id: string) => void;
   addClient: (c: Omit<Client, "id">) => void;
   updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
   addActivityLog: (log: Omit<ActivityLog, "id" | "timestamp">) => void;
   addSignupRequest: (req: Omit<SignupRequest, "id" | "requestedAt">) => void;
   updateCRMConfig: (config: CRMConfig) => void;
@@ -484,12 +486,13 @@ export function useCRMState() {
       setClients((prev) =>
         prev.map((c) => (c.id === id ? { ...c, ...updates } : c)),
       ),
+    deleteClient: (id) => setClients((prev) => prev.filter((c) => c.id !== id)),
     addActivityLog: (log) =>
       setActivityLogs((prev) => [
         {
           ...log,
           id: genId("L"),
-          timestamp: new Date().toLocaleString("en-IN"),
+          timestamp: new Date().toISOString(),
         },
         ...prev,
       ]),

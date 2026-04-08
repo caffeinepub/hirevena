@@ -89,6 +89,19 @@ export class ExternalBlob {
         return this;
     }
 }
+export interface AssignedCandidate {
+    id: string;
+    status: string;
+    assignDate: string;
+    assignedTo: string;
+    campaign: string;
+    name: string;
+    email: string;
+    updatedAt: string;
+    batchId: string;
+    phone: string;
+    skills: string;
+}
 export type Time = bigint;
 export interface Submission {
     id: bigint;
@@ -104,18 +117,16 @@ export interface Submission {
     positions: string;
     followUpDate: string;
 }
-export interface AssignedCandidate {
+export interface Client {
     id: string;
-    status: string;
-    assignDate: string;
-    assignedTo: string;
-    campaign: string;
-    name: string;
+    contactName: string;
+    activeRoles: string;
+    createdAt: string;
     email: string;
-    updatedAt: string;
-    batchId: string;
+    notes: string;
+    companyName: string;
     phone: string;
-    skills: string;
+    location: string;
 }
 export interface Campaign {
     id: bigint;
@@ -137,9 +148,13 @@ export interface backendInterface {
     addAssignedCandidate(id: string, name: string, phone: string, email: string, skills: string, assignedTo: string, campaign: string, batchId: string, assignDate: string): Promise<boolean>;
     approveSignupRequest(email: string): Promise<boolean>;
     createCampaign(campaignName: string, companyName: string, role: string, location: string, salary: string): Promise<bigint>;
+    createClient(id: string, companyName: string, contactName: string, phone: string, email: string, location: string, activeRoles: string, notes: string, createdAt: string): Promise<string>;
     createSubmission(companyName: string, contactName: string, phoneNumber: string, emailAddress: string, role: string, positions: string, urgency: string): Promise<void>;
+    deleteCampaign(id: bigint): Promise<boolean>;
+    deleteClient(id: string): Promise<string>;
     deleteSubmission(id: bigint): Promise<boolean>;
     getAllAssignedCandidates(): Promise<Array<AssignedCandidate>>;
+    getAllClients(): Promise<Array<Client>>;
     getAllSubmissions(): Promise<Array<Submission>>;
     getApprovedRecruiters(): Promise<Array<SignupRequest>>;
     getAssignedCandidates(recruiterEmail: string, campaign: string): Promise<Array<AssignedCandidate>>;
@@ -148,6 +163,7 @@ export interface backendInterface {
     rejectSignupRequest(email: string): Promise<boolean>;
     submitSignupRequest(name: string, email: string, password: string): Promise<void>;
     updateCandidateStatus(id: string, status: string, updatedAt: string): Promise<boolean>;
+    updateClient(id: string, companyName: string, contactName: string, phone: string, email: string, location: string, activeRoles: string, notes: string): Promise<string>;
     updateLead(id: bigint, status: string, notes: string, followUpDate: string): Promise<boolean>;
 }
 export class Backend implements backendInterface {
@@ -194,6 +210,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createClient(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string, arg8: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createClient(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createClient(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+            return result;
+        }
+    }
     async createSubmission(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string): Promise<void> {
         if (this.processError) {
             try {
@@ -205,6 +235,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.createSubmission(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
+            return result;
+        }
+    }
+    async deleteCampaign(arg0: bigint): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteCampaign(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteCampaign(arg0);
+            return result;
+        }
+    }
+    async deleteClient(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteClient(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteClient(arg0);
             return result;
         }
     }
@@ -233,6 +291,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getAllAssignedCandidates();
+            return result;
+        }
+    }
+    async getAllClients(): Promise<Array<Client>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllClients();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllClients();
             return result;
         }
     }
@@ -345,6 +417,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.updateCandidateStatus(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async updateClient(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: string, arg7: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.updateClient(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.updateClient(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7);
             return result;
         }
     }

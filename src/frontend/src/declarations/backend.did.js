@@ -21,6 +21,17 @@ export const AssignedCandidate = IDL.Record({
   'phone' : IDL.Text,
   'skills' : IDL.Text,
 });
+export const Client = IDL.Record({
+  'id' : IDL.Text,
+  'contactName' : IDL.Text,
+  'activeRoles' : IDL.Text,
+  'createdAt' : IDL.Text,
+  'email' : IDL.Text,
+  'notes' : IDL.Text,
+  'companyName' : IDL.Text,
+  'phone' : IDL.Text,
+  'location' : IDL.Text,
+});
 export const Time = IDL.Int;
 export const Submission = IDL.Record({
   'id' : IDL.Nat,
@@ -75,17 +86,35 @@ export const idlService = IDL.Service({
       [IDL.Nat],
       [],
     ),
+  'createClient' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [IDL.Text],
+      [],
+    ),
   'createSubmission' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
       [],
     ),
+  'deleteCampaign' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+  'deleteClient' : IDL.Func([IDL.Text], [IDL.Text], []),
   'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'getAllAssignedCandidates' : IDL.Func(
       [],
       [IDL.Vec(AssignedCandidate)],
       ['query'],
     ),
+  'getAllClients' : IDL.Func([], [IDL.Vec(Client)], ['query']),
   'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
   'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
   'getAssignedCandidates' : IDL.Func(
@@ -100,6 +129,20 @@ export const idlService = IDL.Service({
   'updateCandidateStatus' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text],
       [IDL.Bool],
+      [],
+    ),
+  'updateClient' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+      ],
+      [IDL.Text],
       [],
     ),
   'updateLead' : IDL.Func(
@@ -124,6 +167,17 @@ export const idlFactory = ({ IDL }) => {
     'batchId' : IDL.Text,
     'phone' : IDL.Text,
     'skills' : IDL.Text,
+  });
+  const Client = IDL.Record({
+    'id' : IDL.Text,
+    'contactName' : IDL.Text,
+    'activeRoles' : IDL.Text,
+    'createdAt' : IDL.Text,
+    'email' : IDL.Text,
+    'notes' : IDL.Text,
+    'companyName' : IDL.Text,
+    'phone' : IDL.Text,
+    'location' : IDL.Text,
   });
   const Time = IDL.Int;
   const Submission = IDL.Record({
@@ -179,17 +233,35 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Nat],
         [],
       ),
+    'createClient' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Text],
+        [],
+      ),
     'createSubmission' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
         [],
       ),
+    'deleteCampaign' : IDL.Func([IDL.Nat], [IDL.Bool], []),
+    'deleteClient' : IDL.Func([IDL.Text], [IDL.Text], []),
     'deleteSubmission' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'getAllAssignedCandidates' : IDL.Func(
         [],
         [IDL.Vec(AssignedCandidate)],
         ['query'],
       ),
+    'getAllClients' : IDL.Func([], [IDL.Vec(Client)], ['query']),
     'getAllSubmissions' : IDL.Func([], [IDL.Vec(Submission)], ['query']),
     'getApprovedRecruiters' : IDL.Func([], [IDL.Vec(SignupRequest)], ['query']),
     'getAssignedCandidates' : IDL.Func(
@@ -204,6 +276,20 @@ export const idlFactory = ({ IDL }) => {
     'updateCandidateStatus' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Bool],
+        [],
+      ),
+    'updateClient' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+        ],
+        [IDL.Text],
         [],
       ),
     'updateLead' : IDL.Func(
