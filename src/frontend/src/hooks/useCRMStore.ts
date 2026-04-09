@@ -289,12 +289,32 @@ export function useCRMState() {
   const [recruiters, setRecruiters] = useState<Recruiter[]>(() => {
     const stored: Recruiter[] = loadFromStorage("crm_recruiters", []);
     // Always ensure seed recruiters exist (merge by email, never remove existing data)
+    // Also force status='approved' for the 3 core seed recruiters (rahul, priya, amit)
+    const APPROVED_SEEDS = SEED_RECRUITERS.filter(
+      (s) => s.status === "approved",
+    );
     const merged = [...stored];
     for (const seed of SEED_RECRUITERS) {
-      const exists = merged.some(
+      const idx = merged.findIndex(
         (r) => r.email.toLowerCase() === seed.email.toLowerCase(),
       );
-      if (!exists) merged.push(seed);
+      if (idx < 0) {
+        // Not present at all — add it
+        merged.push(seed);
+      } else if (
+        seed.status === "approved" &&
+        merged[idx].status !== "approved" &&
+        APPROVED_SEEDS.some(
+          (s) => s.email.toLowerCase() === seed.email.toLowerCase(),
+        )
+      ) {
+        // Seed is an always-approved recruiter but stored with wrong status — fix it
+        merged[idx] = {
+          ...merged[idx],
+          status: "approved",
+          password: merged[idx].password || seed.password,
+        };
+      }
     }
     return merged.length > 0 ? merged : SEED_RECRUITERS;
   });

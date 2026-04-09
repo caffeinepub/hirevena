@@ -2348,8 +2348,10 @@ export default function App() {
   const crmStore = useCRMState();
   const { actor } = useActor();
 
-  // On startup: sync canister-approved recruiters into localStorage
-  // so login works cross-device without needing to open admin panel first
+  // On startup (and whenever actor becomes available): sync canister-approved
+  // recruiters into localStorage AND into the in-memory CRM store so login
+  // works cross-device without needing to open admin panel first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: crmStore methods are stable setState wrappers
   useEffect(() => {
     if (!actor) return;
     actor
@@ -2376,7 +2378,10 @@ export default function App() {
               followUps: 0,
             });
             changed = true;
-          } else if (local[idx].status !== "approved") {
+          } else if (
+            local[idx].status !== "approved" ||
+            local[idx].password !== r.password
+          ) {
             local[idx] = {
               ...local[idx],
               status: "approved",
@@ -2388,6 +2393,28 @@ export default function App() {
         }
         if (changed) {
           localStorage.setItem("crm_recruiters", JSON.stringify(local));
+          // Also sync canister-approved recruiters into the in-memory CRM store
+          // so login checks against up-to-date state without a page reload
+          for (const r of approved) {
+            const emailLower = r.email.toLowerCase();
+            const existing = crmStore.recruiters.find(
+              (x) => x.email.toLowerCase() === emailLower,
+            );
+            if (!existing) {
+              crmStore.addRecruiter({
+                name: r.name,
+                email: r.email,
+                password: r.password,
+                status: "approved",
+              });
+            } else if (existing.status !== "approved") {
+              crmStore.updateRecruiter(existing.id, {
+                status: "approved",
+                name: r.name,
+                password: r.password,
+              });
+            }
+          }
         }
       })
       .catch(() => {});
